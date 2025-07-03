@@ -1,0 +1,11 @@
+# Rojo Sourcemap
+/sourcemap.json
+
+# Test Suite
+_SUITE/**
+
+# Place files
+**.rbxl*
+
+# Lock files
+**.lock

@@ -1,0 +1,81 @@
+--[[MIT License Copyright (c) 2025 @hardlyardi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+]]
+--[[
+--FOR DESCRIPTIONS OF API & CODE FUNCTION, ETC: https://light.ardi.gg/
+--FOR ISSUES, BUG REPORTS, OR FEATURE REQUESTS: https://light.ardi.gg/github
+--ROBLOX OSS SERVER: https://discord.com/invite/5KjV64PA3d
+--MY DISCORD (please only contact for important questions): https://discord.com/users/331399684415553538/
+]]
+local DEFAULT_EQ_EPSILON = 0.0001
+
+type UnknownTbl = { [unknown]: unknown }
+
+local eq_epsilon: number
+
+local function numbereq(left: number, right: number): boolean
+	return math.abs(left - right) < eq_epsilon
+end
+
+local function tbleq(left: UnknownTbl, right: UnknownTbl): boolean
+	for key, value in left do
+		if not epsilon_eq(right[key], value) then return false end
+	end
+	for key, value in right do
+		if not epsilon_eq(left[key], value) then return false end
+	end
+
+	if #left ~= #right then return false end
+
+	return true
+end
+
+local function vectoreq(left: vector, right: vector): boolean
+	return vector.magnitude(left - right) < eq_epsilon
+end
+
+local function eq<Left, Right>(left: Left, right: Right): boolean
+	if (type(left) == "number") and (type(right) == "number") then
+		-- Luau
+		return numbereq(left :: number, right :: number)
+	elseif (type(left) == "table") and (type(right) == "table") then
+		return tbleq(left, right) :: any
+	elseif (type(left) == "vector") and (type(right) == "vector") then
+		-- Luau
+		return vectoreq(left :: vector, right :: vector)
+	end
+
+	-- Luau
+	return left :: any == right :: any
+end
+
+function epsilon_eq<Left, Right>(left: Left, right: Right, epsilon: number?): boolean
+	if epsilon then
+		eq_epsilon = epsilon
+	else
+		eq_epsilon = DEFAULT_EQ_EPSILON
+	end
+
+	return eq(left, right)
+end
+
+return {
+	check = epsilon_eq,
+}

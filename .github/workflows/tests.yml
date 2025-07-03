@@ -1,0 +1,58 @@
+name: Run Tests
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/tests.yml
+      - lune/**
+      - src/**
+      - .luaurc
+      - tests/**
+      - pesde.toml
+
+  pull_request:
+  workflow_dispatch:
+  merge_group:
+
+jobs:
+  Test:
+    strategy:
+        matrix:
+            os: [{name: windows, version: windows-latest}, {name: ubuntu, version: ubuntu-latest}, {name: macos, version: macos-latest}, {name: macos-arm, version: macos-14}]
+    name: ${{matrix.os.name}}
+    runs-on: ${{matrix.os.version}}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # only checkout files which are needed for running tests
+          sparse-checkout: |
+            rokit.toml
+            .luaurc
+            lune/
+            src/
+            tests/
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Rokit
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Run Test Script
+        run: lune run lune/tests.luau
+
+      - name: Upload Artifact
+        if: ${{ always() && github.repository == 'hardlyardi/b2264644-3d77-4ab9-8a00-5e9ffb0ff964' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ matrix.os.name }}-${{ matrix.os.version }}
+          path: _SUITE/

@@ -1,0 +1,74 @@
+{
+    // formatter
+    "[luau]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "JohnnyMorganz.stylua",
+        "editor.tabSize": 3,
+        "editor.insertSpaces": false
+    },
+    // new solver
+    "luau-lsp.completion.enableFragmentAutocomplete": true,
+    "luau-lsp.fflags.override": {
+        "LuauSolverV2": "true",
+        "LuauTypeSolverRelease": "2000",
+        "LuauNewSolverPopulateTableLocations": "true",
+        "LuauNewSolverPrePopulateClasses": "true"
+    },
+    "luau-lsp.types.definitionFiles": [],
+    // LSP performance
+    "luau-lsp.diagnostics.workspace": false,
+    // MD linter config for docs
+    "markdownlint.config": {
+        // Inline HTML
+        "MD033": false,
+        // Multiple top level headers
+        "MD025": false,
+        // Duplicate Headers
+        "MD024": false,
+        // Indentation Codeblocks Thingy
+        "MD046": false,
+    },
+    // wretched 4 tabsize
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "prettier.useTabs": false,
+    "editor.detectIndentation": false,
+    // charmed icons
+    "charmed-icons.associations.extensions": {
+        // typedefs
+        "types.luau": "luau-def",
+        // header file
+        "h.luau": "luau-def",
+        // bench file
+        "spec.luau": "test-blue",
+        // impl file
+        "api.luau": "json",
+        // benchmarks
+        "bench.luau": "test-yellow"
+    },
+    "charmed-icons.associations.files": {
+        // typedefs
+        "types.luau": "luau-def",
+        // init.luau, main.luau, mod.luau
+        "init.luau": "julia",
+        "main.luau": "julia",
+        "mod.luau": "julia"
+    },
+    "charmed-icons.associations.folders": {
+        // docs / readme as storybook
+        "_README": "folder_storybook",
+        "docs": "folder_storybook",
+        // testing framework
+        "runtest": "folder_test",
+        // specs/benchmarks
+        "_specs": "folder_test",
+        "_benchmarks": "folder_benchmark",
+    },
+    // custom labels; leaving in project settings.json for now
+    "workbench.editor.customLabels.enabled": true,
+    "workbench.editor.customLabels.patterns": {
+        "**/*.luau": "${dirname}/${filename}.${extname}"
+    },
+    //stylua
+    "stylua.targetReleaseVersion": "latest",
+}
