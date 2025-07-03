@@ -51,7 +51,7 @@ jobs:
         run: lune run lune/tests.luau
 
       - name: Upload Artifact
-        if: ${{ always() && github.repository == 'hardlyardi/b2264644-3d77-4ab9-8a00-5e9ffb0ff964' }}
+        if: ${{ always() && github.repository == 'hardlyardi/b226' }}
         uses: actions/upload-artifact@v4
         with:
           name: tests-${{ matrix.os.name }}-${{ matrix.os.version }}
