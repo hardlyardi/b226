@@ -72,4 +72,13 @@ TEST("components and tag", function(interface)
 	interface:expect_falsy(ecs.has(e1, F))
 end)
 
+PREFIX("bulk_get")
+
+TEST("works", function(interface)
+	ecs.bulk_set(e1, { A, B, C }, { 1, 2, 3 })
+	ecs.bulk_set(e1, { D, E, F }, { 4, nil, 6 })
+	ecs.bulk_remove(e1, { A, E, F })
+	interface:expect_equal(ecs.bulk_get(e1, { D, E, F, A, B, C }), { 4, nil, nil, nil, 2, 3 })
+end)
+
 return DONE()

@@ -17,7 +17,6 @@ on:
       - src/**
       - .luaurc
       - tests/**
-      - pesde.toml
 
   pull_request:
   workflow_dispatch:

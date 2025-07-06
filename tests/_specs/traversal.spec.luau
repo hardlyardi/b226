@@ -9,13 +9,15 @@ local function EN(input: b2.Ent): number
 	return input :: any
 end
 
-local internal = ecs.internal
-local archetypes = internal.archetypes
-local eindex_sparse = internal.eindex_sparse
+local ecsinternal = ecs.internal
+local archetypes = ecsinternal.archetypes
+local eindex_sparse = ecsinternal.eindex_sparse
 
 local A = ecs.component()
 local B = ecs.component()
 local C = ecs.entity()
+local e1 = ecs.entity()
+local e2 = ecs.entity()
 
 local starting_arch_count = #archetypes
 
@@ -44,9 +46,6 @@ TEST("divergence", function(interface)
 end)
 
 TEST("divergent convergence", function(interface)
-	local e1 = ecs.entity()
-	local e2 = ecs.entity()
-
 	ecs.add(e1, A)
 	ecs.add(e2, B)
 	ecs.add(e1, B)
@@ -58,7 +57,9 @@ TEST("divergent convergence", function(interface)
 end)
 
 TEST("clearing removes an archetype", function(interface)
-	ecs.clear(C)
+	ecs.add(e1, A)
+	ecs.clear(A)
+	ecs.ensure_dense_archetypes()
 	interface:expect_equal(#archetypes, starting_arch_count)
 end)
 
