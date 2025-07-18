@@ -3757,7 +3757,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		existed = ecs_existed,
 		contains = ecs_contains,
 		entity = ecs_entity,
-		ecs_in_use = ecs_in_use,
+		in_use = ecs_in_use,
 		get = ecs_get,
 		bulk_get = ecs_bulk_get,
 		has = ecs_has,
@@ -3964,7 +3964,7 @@ export type OldSolverECS = {
 	-- does an entity with this ID exist, and is it alive?
 	contains: (entity: Ent) -> boolean,
 	entity: () -> Ent,
-	ecs_in_use: (Ent) -> boolean,
+	in_use: (Ent) -> boolean,
 	get: (<A>(entity: Ent, component: Ent<A>) -> A?)
 		& (<A, B>(entity: Ent, a: Ent<A>, b: Ent<B>) -> (A?, B?))
 		& (<A, B, C>(entity: Ent, a: Ent<A>, b: Ent<B>, c: Ent<C>) -> (A?, B?, C?))
