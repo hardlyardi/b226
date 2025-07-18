@@ -13,7 +13,7 @@ guarantees regarding querying safety which may hurt performance (benchmarks yet-
 
 ## Installation
 
-You can install b226 via [Wally](https://wally.run/package/hardlyardi/b226?version=0.2.3)
+You can install b226 via [Wally](https://wally.run/package/hardlyardi/b226?version=0.2.3). As of right now, B2 is only one file at `src/init.luau`
 
 ## Special Thanks
 
@@ -37,15 +37,16 @@ local ecs = b2.ecs(false)
 ## Entities
 
 Entities represent containers for data in a game. Your game might have entities which look like characters, map objects,
-projectiles, particles, etc. To give life to this entity, you'll need to add Components. For now, I'll use the built-in
+projectiles, particles, etc. At the simplest level, an entity is a unique identifier capable of containing data.
+To give life to an entity, you'll need to add Components. For now, I'll use the built-in
 component `b2.Name` as an example.
 
 ```luau
 -- creates a new entity with no components and returns its identifier
 local alice = ecs.entity()
 
-ecs.set(entity, b2.Name, "Alice")
-ecs.get(entity, b2.Name) --> "Alice"
+ecs.set(alice, b2.Name, "Alice")
+ecs.get(alice, b2.Name) --> "Alice"
 ```
 
 By itself, an entity is just a unique number, and has no data. Using `ecs.contains`, you can check if an identifier
