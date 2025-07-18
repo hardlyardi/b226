@@ -1,7 +1,10 @@
 --!optimize 0
 local TEST, DONE, PREFIX = require("@test/utils/spec")(...)
 
+local b2 = require("@b2")
 local ecs = require("@test/utils/ecs")
+
+local pair = b2.pair
 
 local A = ecs.component()
 local B = ecs.component()
@@ -24,24 +27,45 @@ PREFIX("bulk_set")
 
 TEST("components", function(interface)
 	ecs.bulk_set(e1, { A, B, C }, { 1, 2, 3 })
-	interface:expect_truthy(ecs.get(e1, A) == 1)
-	interface:expect_truthy(ecs.get(e1, B) == 2)
-	interface:expect_truthy(ecs.get(e1, C) == 3)
+	interface:expect_equal(ecs.get(e1, A), 1)
+	interface:expect_equal(ecs.get(e1, B), 2)
+	interface:expect_equal(ecs.get(e1, C), 3)
+	ecs.bulk_set(e1, { A, B, C }, { 4, 5, 6 })
+	interface:expect_equal(ecs.get(e1, A), 4)
+	interface:expect_equal(ecs.get(e1, B), 5)
+	interface:expect_equal(ecs.get(e1, C), 6)
 end)
 
 TEST("components and tag", function(interface)
 	ecs.bulk_set(e1, { A, B, C }, { 1, 2, 3 })
-	ecs.bulk_set(e1, { D, E, F }, { 4, nil, 6 })
+	interface:expect_equal(ecs.get(e1, C), 3)
+	ecs.bulk_set(e1, { D, E, F, C }, { 4, nil, 6, 9 })
 	interface:expect_equal(ecs.get(e1, A), 1)
 	interface:expect_equal(ecs.get(e1, B), 2)
-	interface:expect_equal(ecs.get(e1, C), 3)
+	interface:expect_equal(ecs.get(e1, C), 9)
 	interface:expect_equal(ecs.get(e1, D), 4)
 	interface:expect_equal(ecs.get(e1, E), nil)
 	interface:expect_equal(ecs.get(e1, F), 6)
 	interface:expect_truthy(ecs.has(e1, E))
 end)
 
+TEST("component pairs", function(interface)
+	ecs.bulk_set(e1, { pair(A, B), pair(D, A) }, { true, 1 })
+	interface:expect_equal(ecs.get(e1, pair(A, B)), true)
+	interface:expect_equal(ecs.get(e1, pair(D, A)), 1)
+	ecs.bulk_set(e1, { pair(A, B), pair(D, A) }, { -1, 2 })
+	interface:expect_equal(ecs.get(e1, pair(A, B)), -1)
+	interface:expect_equal(ecs.get(e1, pair(D, A)), 2)
+end)
+
 PREFIX("bulk_remove")
+
+TEST("component pairs", function(interface)
+	ecs.bulk_set(e1, { pair(A, B), pair(D, A) }, { true, 1 })
+	ecs.bulk_remove(e1, { pair(A, B), pair(D, A) })
+	interface:expect_equal(ecs.get(e1, pair(A, B)), nil)
+	interface:expect_equal(ecs.get(e1, pair(D, A)), nil)
+end)
 
 TEST("components", function(interface)
 	ecs.bulk_set(e1, { A, B, C }, { 1, 2, 3 })

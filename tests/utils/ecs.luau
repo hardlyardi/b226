@@ -1,3 +1,3 @@
 local b2 = require("@b2/")
 
-return b2.ecs(true :: true)
+return b2.ecs(true :: true, true :: true)

@@ -497,4 +497,272 @@ TEST("deleting while iterating", function(interface)
 	interface:expect_equal(count, 3)
 end)
 
+PREFIX("query observers")
+
+TEST("ecs.add observes added", function(interface)
+	local added_count = 0
+	q:observe_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, B)
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("ecs.bulk_add observes added", function(interface)
+	local added_count = 0
+	q:observe_added(function()
+		added_count += 1
+	end)
+	ecs.bulk_add(e1, { A, B })
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("ecs.bulk_add with exclusion does not observe added", function(interface)
+	local added_count = 0
+	q:observe_added(function()
+		added_count += 1
+	end)
+	ecs.bulk_add(e1, { A, B, C })
+	interface:expect_equal(added_count, 0)
+end)
+
+TEST("ecs.remove exclusion observes added", function(interface)
+	local added_count = 0
+	q:observe_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, C)
+	ecs.add(e1, B)
+	interface:expect_equal(added_count, 0)
+	ecs.remove(e1, C)
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("adding pair observes added for pair query", function(interface)
+	local added_count = 0
+	ecs.query(pair(e2, e3)):observe_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("adding pair observes added for pair(rel, wildcard)", function(interface)
+	local added_count = 0
+	ecs.query(pair(e2, Wildcard)):observe_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("adding pair observes added for pair(Wildcard, targ)", function(interface)
+	local added_count = 0
+	ecs.query(pair(Wildcard, e3)):observe_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("clearing relation observes removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):observe_removed(function()
+		removed_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e2)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("deleting relation observes removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):observe_removed(function()
+		removed_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e2, true)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("clearing target observes removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):observe_removed(function()
+		removed_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e3)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("deleting target observes removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):observe_removed(function()
+		removed_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e3, true)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("clearing observes removed", function(interface)
+	local removed_count = 0
+	q:observe_removed(function()
+		removed_count += 1
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, B)
+	ecs.clear(B)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("deleting observes removed", function(interface)
+	local removed_count = 0
+	q:observe_removed(function()
+		removed_count += 1
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, B)
+	ecs.clear(B, true)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+PREFIX("query monitors")
+
+TEST("ecs.add monitors added", function(interface)
+	local added_count = 0
+	q:monitor_added(function(e)
+		added_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, B)
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("ecs.bulk_add monitors added", function(interface)
+	local added_count = 0
+	q:monitor_added(function(e)
+		added_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.bulk_add(e1, { A, B })
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("ecs.bulk_add with exclusion does not monitor added", function(interface)
+	local added_count = 0
+	q:monitor_added(function()
+		added_count += 1
+	end)
+	ecs.bulk_add(e1, { A, B, C })
+	interface:expect_equal(added_count, 0)
+end)
+
+TEST("ecs.remove exclusion monitors added", function(interface)
+	local added_count = 0
+	q:monitor_added(function(e)
+		added_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, C)
+	ecs.add(e1, B)
+	interface:expect_equal(added_count, 0)
+	ecs.remove(e1, C)
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("adding pair monitors added for pair query", function(interface)
+	local added_count = 0
+	ecs.query(pair(e2, e3)):monitor_added(function(e)
+		added_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, pair(e2, e3))
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("clearing relation monitors removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):monitor_removed(function(e)
+		removed_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e2)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("deleting relation monitors removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):monitor_removed(function(e)
+		removed_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e2, true)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("clearing target monitors removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):monitor_removed(function(e)
+		removed_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e3)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("deleting target monitors removed on pair", function(interface)
+	local removed_count = 0
+	ecs.query(pair(e2, e3)):monitor_removed(function(e)
+		removed_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, pair(e2, e3))
+	ecs.clear(e3, true)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("clearing monitors removed", function(interface)
+	local removed_count = 0
+	q:monitor_removed(function(e)
+		removed_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, B)
+	ecs.clear(B)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
+TEST("deleting monitors removed", function(interface)
+	local removed_count = 0
+	q:monitor_removed(function(e)
+		removed_count += 1
+		interface:expect_equal(e, e1)
+	end)
+	ecs.add(e1, A)
+	ecs.add(e1, B)
+	ecs.clear(B, true)
+	ecs.cleanup()
+	interface:expect_equal(removed_count, 1)
+end)
+
 return DONE()
