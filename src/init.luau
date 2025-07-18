@@ -411,6 +411,12 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return (eindex_new_id_alive())
 	end
 
+	local function ecs_id_of(entity: U53): { U53 }
+		local record = eindex_try_matching_record(entity)
+		if not record then return {} end
+		return table.clone(record.arch.ids)
+	end
+
 	local function ecs_in_use(entity: U53): boolean
 		local record = eindex_try_matching_record(entity)
 		if record then return not not record.hooks end
@@ -3387,6 +3393,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		existed = ecs_existed,
 		contains = ecs_contains,
 		entity = ecs_entity,
+		id_of = ecs_id_of,
 		in_use = ecs_in_use,
 		get = ecs_get,
 		bulk_get = ecs_bulk_get,
@@ -3430,6 +3437,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			ent_try_latest_alive = ent_try_latest_alive,
 			eindex_new_id_alive = eindex_new_id_alive,
 			ecs_entity = ecs_entity,
+			ecs_id_of = ecs_id_of,
 			ecs_in_use = ecs_in_use,
 			arch_ensure_dense = arch_ensure_dense,
 			arch_move = arch_move,
@@ -3595,6 +3603,7 @@ export type OldSolverECS = {
 	-- does an entity with this ID exist, and is it alive?
 	contains: (entity: Ent) -> boolean,
 	entity: () -> Ent,
+	id_of: (Ent) -> { Ent },
 	in_use: (Ent) -> boolean,
 	get: (<A>(entity: Ent, component: Ent<A>) -> A?)
 		& (<A, B>(entity: Ent, a: Ent<A>, b: Ent<B>) -> (A?, B?))
