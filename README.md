@@ -13,7 +13,7 @@ guarantees regarding querying safety which may hurt performance (benchmarks yet-
 
 ## Installation
 
-You can install b226 via [Wally](https://wally.run/package/hardlyardi/b226?version=0.2.3)
+You can install b226 via [Wally](https://wally.run/package/hardlyardi/b226?version=0.2.3). As of right now, B2 is only one file at `src/init.luau`
 
 ## Special Thanks
 
