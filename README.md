@@ -13,7 +13,7 @@ guarantees regarding querying safety which may hurt performance (benchmarks yet-
 
 ## Installation
 
-You can install b226 via [Wally](https://wally.run/package/hardlyardi/b226?version=0.2.2)
+You can install b226 via [Wally](https://wally.run/package/hardlyardi/b226?version=0.2.3)
 
 ## Special Thanks
 

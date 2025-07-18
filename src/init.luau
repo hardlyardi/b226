@@ -1,4 +1,5 @@
---!optimize 0
+--!optimize 2
+--!native
 --[[
 - U53:
 	Represents a positive integer with a number (a.k.a., double, or F64) value. 2^53 is the maximum unsigned integer a
