@@ -3955,7 +3955,7 @@ export type Query<Reads...> = {
 	monitor_added_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> (),
 	monitor_removed_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> (),
 	monitor_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> (),
-	monitor_removed: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> (),
+	monitor_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> (),
 }
 
 export type OldSolverECS = {
