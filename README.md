@@ -68,9 +68,9 @@ Adds a component to an entity. If the entity already has the component, this wil
 
 Sets the value of a component for an entity. If the component does not exist on the entity, it will be added.
 
-### `ecs.get(entity, Component, Components...)`
+### `ecs.get(entity, Component, Components...): Values...`
 
-Gets the value of components from an entity.
+Returns the value of each component passed from an entity.
 
 ### `ecs.remove(entity, Component)`
 
