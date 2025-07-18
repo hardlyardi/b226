@@ -37,7 +37,8 @@ local ecs = b2.ecs(false)
 ## Entities
 
 Entities represent containers for data in a game. Your game might have entities which look like characters, map objects,
-projectiles, particles, etc. To give life to this entity, you'll need to add Components. For now, I'll use the built-in
+projectiles, particles, etc. At the simplest level, an entity is a unique identifier capable of containing data.
+To give life to an entity, you'll need to add Components. For now, I'll use the built-in
 component `b2.Name` as an example.
 
 ```luau
