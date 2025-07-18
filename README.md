@@ -1,6 +1,6 @@
 # B2?
 
-b2264644-3d77-4ab9-8a00-5e9ffb0ff964 is a robust, fast, and lightweight entity component system for luau. It is fully
+b2264644-3d77-4ab9-8a00-5e9ffb0ff964 is a robust, fast, and lightweight entity component system for Luau. It is fully
 unit-tested, and supports modern features on-par with similar libraries. B2 is still early in development (pre-1.0), so,
 expect breaking changes on updates to 0.**X**.0 versions.
 
@@ -52,7 +52,7 @@ By itself, an entity is just a unique number, and has no data. Using `ecs.contai
 exists as a valid entity.
 
 ```luau
-ecs.exists(alice) --> true
+ecs.contains(alice) --> true
 ```
 
 ## Base Operations
