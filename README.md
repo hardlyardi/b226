@@ -52,7 +52,7 @@ By itself, an entity is just a unique number, and has no data. Using `ecs.contai
 exists as a valid entity.
 
 ```luau
-ecs.exists(alice) --> true
+ecs.contains(alice) --> true
 ```
 
 ## Base Operations
