@@ -45,8 +45,8 @@ component `b2.Name` as an example.
 -- creates a new entity with no components and returns its identifier
 local alice = ecs.entity()
 
-ecs.set(entity, b2.Name, "Alice")
-ecs.get(entity, b2.Name) --> "Alice"
+ecs.set(alice, b2.Name, "Alice")
+ecs.get(alice, b2.Name) --> "Alice"
 ```
 
 By itself, an entity is just a unique number, and has no data. Using `ecs.contains`, you can check if an identifier
