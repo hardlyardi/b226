@@ -2539,9 +2539,9 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return compatible
 	end
 
-	function queryobj.entities(self: QueryIdentityInternal): () -> (U53?, ...any)
+	function queryobj.entities(self: QueryIdentityInternal, cached: true?): () -> (U53?, ...any)
 		if not disable_auto_ensure_dense then ecs_ensure_dense_archetypes() end
-		local compatible_archs = self:archetypes()
+		local compatible_archs = if cached then self:archetypes_cached() else self:archetypes()
 		local compatible_count = #compatible_archs
 
 		if compatible_count == 0 then return NOOP :: () -> U53? end
@@ -2925,7 +2925,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return query_iter
 	end
 
-	function queryobj.observe_added(self: QueryIdentityInternal, callback: (Arch) -> ()): ()
+	function queryobj.observe_added(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
 		local with_dense = self._with_dense
 		local First = ASSERT(with_dense[1], "Internal Error")
 
@@ -2947,9 +2947,21 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		else
 			table.insert(added_cached, observer)
 		end
+
+		local function observer_destroy(): ()
+			local found_index = table.find(added_cached, observer)
+			if not found_index then return end
+			local added_cached_count = #added_cached
+			if found_index ~= added_cached_count then
+				added_cached[found_index] = added_cached[added_cached_count] --
+			end
+			added_cached[added_cached_count] = nil
+		end
+
+		return observer_destroy
 	end
 
-	function queryobj.observe_removed(self: QueryIdentityInternal, callback: (Arch) -> ()): ()
+	function queryobj.observe_removed(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
 		local with_dense = self._with_dense
 		local First = ASSERT(with_dense[1], "Internal Error")
 
@@ -2971,6 +2983,18 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		else
 			table.insert(removed_cached, observer)
 		end
+
+		local function observer_destroy(): ()
+			local found_index = table.find(removed_cached, observer)
+			if not found_index then return end
+			local removed_cached_count = #removed_cached
+			if found_index ~= removed_cached_count then
+				removed_cached[found_index] = removed_cached[removed_cached_count] --
+			end
+			removed_cached[removed_cached_count] = nil
+		end
+
+		return observer_destroy
 	end
 
 	function queryobj.monitor_added_row(self: QueryIdentityInternal, callback: (U53, Arch, Row) -> ()): () -> ()
@@ -3335,401 +3359,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return arch_cache_dense
 	end
 
-	function queryobj.entities_cached(self: QueryIdentityInternal): () -> (U53?, ...any)
-		if not disable_auto_ensure_dense then ecs_ensure_dense_archetypes() end
-		local compatible_archs = self:archetypes_cached()
-		local compatible_count = #compatible_archs
-
-		if compatible_count == 0 then return NOOP :: () -> U53? end
-
-		local reads = self._reads
-		local reads_count = #reads
-
-		local compatible_ent_counts: { U26 } = {}
-		local compatible_reads: { { Column } } = {}
-		for compatible_index = 1, compatible_count do
-			local compatible_arch = compatible_archs[compatible_index]
-			local columns_map = compatible_arch.columns_map
-			compatible_ent_counts[compatible_index] = #compatible_arch.ents
-
-			local reads_list = table.create(reads_count) :: { Column }
-			for reads_index = 1, reads_count do
-				local read_id = reads[reads_index]
-				reads_list[read_id] = columns_map[read_id]
-			end
-			compatible_reads[compatible_index] = reads_list
-		end
-
-		local arch = compatible_archs[compatible_count]
-		local entities = arch.ents
-		local columns_map_init = arch.columns_map
-		local row = compatible_ent_counts[compatible_count]
-
-		local query_iter: () -> (U53?, ...any)
-		if reads_count == 1 then
-			local A = reads[1]
-			local col1 = columns_map_init[A]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53, col1[read_row]
-			end
-		elseif reads_count == 2 then
-			local A = reads[1]
-			local B = reads[2]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row]
-			end
-		elseif reads_count == 3 then
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row], col3[read_row]
-			end
-		elseif reads_count == 4 then
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local D = reads[4]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			local col4 = columns_map_init[D]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-						col4 = columns_map[D]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row], col3[read_row], col4[read_row]
-			end
-		elseif reads_count == 5 then
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local D = reads[4]
-			local E = reads[5]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			local col4 = columns_map_init[D]
-			local col5 = columns_map_init[E]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-						col4 = columns_map[D]
-						col5 = columns_map[E]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row], col3[read_row], col4[read_row], col5[read_row]
-			end
-		elseif reads_count == 6 then
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local D = reads[4]
-			local E = reads[5]
-			local F = reads[6]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			local col4 = columns_map_init[D]
-			local col5 = columns_map_init[E]
-			local col6 = columns_map_init[F]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-						col4 = columns_map[D]
-						col5 = columns_map[E]
-						col6 = columns_map[F]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53,
-					col1[read_row],
-					col2[read_row],
-					col3[read_row],
-					col4[read_row],
-					col5[read_row],
-					col6[read_row]
-			end
-		elseif reads_count == 7 then
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local D = reads[4]
-			local E = reads[5]
-			local F = reads[6]
-			local G = reads[7]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			local col4 = columns_map_init[D]
-			local col5 = columns_map_init[E]
-			local col6 = columns_map_init[F]
-			local col7 = columns_map_init[G]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-						col4 = columns_map[D]
-						col5 = columns_map[E]
-						col6 = columns_map[F]
-						col7 = columns_map[G]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53,
-					col1[read_row],
-					col2[read_row],
-					col3[read_row],
-					col4[read_row],
-					col5[read_row],
-					col6[read_row],
-					col7[read_row]
-			end
-		elseif reads_count == 8 then
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local D = reads[4]
-			local E = reads[5]
-			local F = reads[6]
-			local G = reads[7]
-			local H = reads[8]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			local col4 = columns_map_init[D]
-			local col5 = columns_map_init[E]
-			local col6 = columns_map_init[F]
-			local col7 = columns_map_init[G]
-			local col8 = columns_map_init[H]
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-						col4 = columns_map[D]
-						col5 = columns_map[E]
-						col6 = columns_map[F]
-						col7 = columns_map[G]
-						col8 = columns_map[H]
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				return ent :: U53,
-					col1[read_row],
-					col2[read_row],
-					col3[read_row],
-					col4[read_row],
-					col5[read_row],
-					col6[read_row],
-					col7[read_row],
-					col8[read_row]
-			end
-		elseif reads_count == 0 then
-			error("needs to read at least 1 component", 2)
-		else
-			local A = reads[1]
-			local B = reads[2]
-			local C = reads[3]
-			local D = reads[4]
-			local E = reads[5]
-			local F = reads[6]
-			local G = reads[7]
-			local H = reads[8]
-			local col1 = columns_map_init[A]
-			local col2 = columns_map_init[B]
-			local col3 = columns_map_init[C]
-			local col4 = columns_map_init[D]
-			local col5 = columns_map_init[E]
-			local col6 = columns_map_init[F]
-			local col7 = columns_map_init[G]
-			local col8 = columns_map_init[H]
-			local colrest_count = reads_count - 8
-			local colrest = table.create(colrest_count) :: { Column }
-			for colrest_index = 1, colrest_count do
-				local Id = reads[8 + colrest_index]
-				colrest[colrest_index] = columns_map_init[Id]
-			end
-			function query_iter(): (U53?, ...any)
-				local read_row = row
-				local ent = entities[read_row]
-				while not ent do
-					read_row -= 1
-					if read_row <= 0 then
-						compatible_count -= 1
-						if compatible_count == 0 then return nil end
-
-						arch = compatible_archs[compatible_count]
-						entities = arch.ents
-						local columns_map = arch.columns_map
-						read_row = compatible_ent_counts[compatible_count]
-						col1 = columns_map[A]
-						col2 = columns_map[B]
-						col3 = columns_map[C]
-						col4 = columns_map[D]
-						col5 = columns_map[E]
-						col6 = columns_map[F]
-						col7 = columns_map[G]
-						col8 = columns_map[H]
-						colrest = table.create(colrest_count) :: { Column }
-						for colrest_index = 1, colrest_count do
-							local Id = reads[8 + colrest_index]
-							colrest[colrest_index] = columns_map[Id]
-						end
-					end
-					ent = entities[read_row]
-				end
-				row = read_row - 1
-				local read_rest = table.create(colrest_count)
-				for colrest_index = 1, colrest_count do
-					read_rest[colrest_index] = colrest[colrest_index][read_row]
-				end
-				return ent :: U53,
-					col1[read_row],
-					col2[read_row],
-					col3[read_row],
-					col4[read_row],
-					col5[read_row],
-					col6[read_row],
-					col7[read_row],
-					col8[read_row],
-					table.unpack(read_rest)
-			end
-		end
-
-		return query_iter
-	end
-
 	ROOT_ARCHETYPE = agraph_ensure_arch(agraph_root)
 
 	for _ = 1, MAX_PAGED_COMPONENT do
@@ -3943,20 +3572,21 @@ local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
 export type Ent<T = any> = { _B2: T }
 export type Id<T = nil> = Ent<T>
 
+type Destructor = () -> ()
+
 export type Query<Reads...> = {
 	with: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
 	without: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
 	match: (self: Query<Reads...>) -> (Arch) -> boolean,
 	archetypes: (self: Query<Reads...>) -> { Arch },
-	entities: (self: Query<Reads...>) -> () -> (Ent, Reads...),
+	entities: (self: Query<Reads...>, cached: true?) -> () -> (Ent, Reads...),
 	archetypes_cached: (self: Query<Reads...>) -> { Arch },
-	entities_cached: (self: Query<Reads...>) -> () -> (Ent, Reads...),
-	observe_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> (),
-	observe_removed: (self: Query<Reads...>, callback: (Arch) -> ()) -> (),
-	monitor_added_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> (),
-	monitor_removed_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> (),
-	monitor_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> (),
-	monitor_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> (),
+	observe_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
+	observe_removed: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
+	monitor_added_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> Destructor,
+	monitor_removed_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> Destructor,
+	monitor_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> Destructor,
+	monitor_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> Destructor,
 }
 
 export type OldSolverECS = {
