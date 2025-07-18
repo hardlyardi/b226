@@ -124,7 +124,7 @@ TEST("cached_entities", function(interface)
 	ecs.set(e1, B, false)
 
 	local iter_count = 0
-	for ent, a, b in q:entities_cached() do
+	for ent, a, b in q:entities(true) do
 		iter_count += 1
 		interface:expect_equal(ent, e1)
 		interface:expect_equal(a, true)
@@ -132,7 +132,7 @@ TEST("cached_entities", function(interface)
 	end
 	interface:expect_equal(iter_count, 1)
 	iter_count = 0
-	for ent, a, b in q:entities_cached() do
+	for ent, a, b in q:entities(true) do
 		iter_count += 1
 		interface:expect_equal(ent, e1)
 		interface:expect_equal(a, true)
@@ -143,7 +143,7 @@ TEST("cached_entities", function(interface)
 	ecs.add(e2, D)
 	ecs.set(e2, B, true)
 	iter_count = 0
-	for ent, a, b in q:entities_cached() do
+	for ent, a, b in q:entities(true) do
 		iter_count += 1
 		if ent == e1 then
 			interface:expect_equal(a, true)
@@ -158,7 +158,7 @@ TEST("cached_entities", function(interface)
 	interface:expect_equal(iter_count, 2)
 	ecs.set(e1, C, true)
 	iter_count = 0
-	for ent, a, b in q:entities_cached() do
+	for ent, a, b in q:entities(true) do
 		iter_count += 1
 		interface:expect_equal(ent, e2)
 		interface:expect_equal(a, false)
