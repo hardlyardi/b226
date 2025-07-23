@@ -10,7 +10,7 @@ local Name = b2.Name
 
 local A = ecs.component()
 local B = ecs.component()
-local C = ecs.component() :: b2.Id<boolean>
+local C = ecs.component()
 local D = ecs.component()
 
 local e1 = ecs.entity()
@@ -292,6 +292,23 @@ for components_count = 1, 9 do
 			error("wtf")
 		end
 		interface:expect_equal(count, 1)
+	end)
+
+	TEST(`outer {components_count} components no filter`, function(interface)
+		for iter = 1, components_count do
+			local Component = ecs.component()
+			ecs.add(e1, Component)
+			ecs.add(e2, Component)
+			table.insert(cts, Component)
+		end
+
+		local query = ecs.query(table.unpack(cts))
+
+		local count: number
+		for arch, row_count in query:outer() do
+			count = row_count
+		end
+		interface:expect_equal(count, 2)
 	end)
 
 	TEST(`{components_count} components + filter`, function(interface)

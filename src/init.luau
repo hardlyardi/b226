@@ -355,6 +355,45 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return false
 	end
 
+	local function ecs_arch_data(
+		archetype: Arch,
+		A: U53?,
+		B: U53?,
+		C: U53?,
+		D: U53?,
+		...: U53
+	): ({ U53 | false }, ...Column)
+		local columns_map = archetype.columns_map
+		local entities = archetype.ents
+
+		if A then
+			local a = columns_map[A]
+			if B then
+				local b = columns_map[B]
+				if C then
+					local c = columns_map[C]
+					if D then
+						local d = columns_map[D]
+						local E = ...
+						if E then
+							local rest: { any } = { ... }
+							for index = 1, #rest do
+								rest[index] = columns_map[rest[index]]
+							end
+							return entities, a, b, c, d, table.unpack(rest)
+						end
+						return entities, a, b, c, d
+					end
+					return entities, a, b, c
+				end
+				return entities, a, b
+			end
+			return entities, a
+		end
+
+		return entities
+	end
+
 	local function ecs_existed(entity: U53): boolean
 		return eindex_try_any_record(entity) ~= nil
 	end
@@ -2545,6 +2584,31 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return compatible
 	end
 
+	function queryobj.outer(self: QueryIdentityInternal, cached: true?): () -> (Arch, number)
+		local compatible_archs = if cached then self:archetypes_cached() else self:archetypes()
+		local compatible_count = #compatible_archs
+
+		if compatible_count == 0 then return NOOP :: () -> (Arch, number) end
+
+		local compatible_ent_counts: { U26 } = {}
+		for compatible_index = 1, compatible_count do
+			local compatible_arch = compatible_archs[compatible_index]
+			compatible_ent_counts[compatible_index] = #compatible_arch.ents
+		end
+
+		local query_outer_iter: () -> (Arch, number)
+		function query_outer_iter(): (Arch, number)
+			local this = compatible_count
+			compatible_count = this - 1
+			local arch = compatible_archs[this]
+			local row_count = compatible_ent_counts[this]
+
+			return arch, row_count
+		end
+
+		return query_outer_iter
+	end
+
 	function queryobj.entities(self: QueryIdentityInternal, cached: true?): () -> (U53?, ...any)
 		if not disable_auto_ensure_dense then ecs_ensure_dense_archetypes() end
 		local compatible_archs = if cached then self:archetypes_cached() else self:archetypes()
@@ -2555,7 +2619,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		local reads = self._reads
 		local reads_count = #reads
 
-		local compatible_ent_counts: { U26 } = {}
+		local compatible_ent_counts = table.create(compatible_count) :: { U26 }
 		for compatible_index = 1, compatible_count do
 			local compatible_arch = compatible_archs[compatible_index]
 			compatible_ent_counts[compatible_index] = #compatible_arch.ents
@@ -2857,7 +2921,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 					col8[read_row]
 			end
 		elseif reads_count == 0 then
-			error("needs to read at least 1 component", 2)
+			error("Internal Error", 2)
 		else
 			local A = reads[1]
 			local B = reads[2]
@@ -3390,6 +3454,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 
 	--stylua: ignore
 	return {
+		arch_data = ecs_arch_data,
 		existed = ecs_existed,
 		contains = ecs_contains,
 		entity = ecs_entity,
@@ -3432,6 +3497,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			eindex_try_any_record = eindex_try_any_record,
 			eindex_try_matching_record = eindex_try_matching_record,
 			eindex_alive_eh = eindex_alive_eh,
+			ecs_arch_data = ecs_arch_data,
 			ecs_existed = ecs_existed,
 			ecs_contains = ecs_contains,
 			ent_try_latest_alive = ent_try_latest_alive,
@@ -3497,6 +3563,7 @@ export type Query<Reads...> = {
 	without: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
 	match: (self: Query<Reads...>) -> (Arch) -> boolean,
 	archetypes: (self: Query<Reads...>) -> { Arch },
+	outer: (self: Query<Reads...>, cached: true?) -> () -> (Arch, number),
 	entities: (self: Query<Reads...>, cached: true?) -> () -> (Ent, Reads...),
 	archetypes_cached: (self: Query<Reads...>) -> { Arch },
 	observe_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
@@ -3508,6 +3575,49 @@ export type Query<Reads...> = {
 }
 
 export type OldSolverECS = {
+	arch_data: ((archetype: Arch) -> { Ent | false })
+		& (<A>(archetype: Arch, a: Ent<A>) -> ({ Ent | false }, { A }))
+		& (<A, B>(archetype: Arch, a: Ent<A>, b: Ent<B>) -> ({ Ent | false }, { A }, { B }))
+		& (<A, B, C>(
+			archetype: Arch,
+			a: Ent<A>,
+			b: Ent<B>,
+			c: Ent<C>
+		) -> ({ Ent | false }, { A }, { B }, { C }))
+		& (<A, B, C, D>(
+			archetype: Arch,
+			a: Ent<A>,
+			b: Ent<B>,
+			c: Ent<C>,
+			d: Ent<D>
+		) -> ({ Ent | false }, { A }, { B }, { C }, { D }))
+		& (<A, B, C, D, E>(
+			archetype: Arch,
+			a: Ent<A>,
+			b: Ent<B>,
+			c: Ent<C>,
+			d: Ent<D>,
+			e: Ent<E>
+		) -> ({ Ent | false }, { A }, { B }, { C }, { D }, { E }))
+		& (<A, B, C, D, E, F>(
+			archetype: Arch,
+			a: Ent<A>,
+			b: Ent<B>,
+			c: Ent<C>,
+			d: Ent<D>,
+			e: Ent<E>,
+			f: Ent<F>
+		) -> ({ Ent | false }, { A }, { B }, { C }, { D }, { E }, { F }))
+		& (<A, B, C, D, E, F, G>(
+			archetype: Arch,
+			a: Ent<A>,
+			b: Ent<B>,
+			c: Ent<C>,
+			d: Ent<D>,
+			e: Ent<E>,
+			f: Ent<F>,
+			...Ent<G>
+		) -> ({ Ent | false }, { A }, { B }, { C }, { D }, { E }, { F }, ...{ G })),
 	-- has an entity with this ID ever existed under any generation?
 	existed: (entity: Ent) -> boolean,
 	-- does an entity with this ID exist, and is it alive?
@@ -3607,7 +3717,7 @@ local function CAST_ID(value: any): Id
 end
 
 local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
-	ecs = ecs_new :: ((new_solver: true, disable_auto_ensure_dense: boolean?) -> (NewSolverECS)) & ((new_solver: false, disable_auto_ensure_dense: boolean?) -> (OldSolverECS)),
+	ecs = ecs_new :: ((new_solver: true, disable_auto_ensure_dense: boolean?) -> NewSolverECS) & ((new_solver: false, disable_auto_ensure_dense: boolean?) -> OldSolverECS),
 	pair = ENT_PAIR :: (hi: Ent, lo: Ent) -> Ent,
 	pair_eh = ENT_PAIR_EH :: (id: Ent | U53) -> boolean,
 	pair_hi = ENT_PAIR_HI :: (id: Ent | U53) -> Ent,
