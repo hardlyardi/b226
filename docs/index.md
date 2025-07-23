@@ -20,24 +20,25 @@ hero:
 features:
   - title: Entity Relationships
     details:
-        Entity relationships make it easy and lightning ⚡ fast to describe links between entities. Exclusive
-        relationships allow you to represent hierarchies directly in the ECS.
+        Entity relationships make it easy and lightning ⚡ fast to describe links 🔗 between entities. Exclusive
+        relationships 💑 allow you to represent hierarchies directly in the ECS.
   - title: Fast Querying
     details:
-        Queries are blazingly 🔥 fast and have caching, optimized around querying many components at a time
+        Queries are blazingly 🔥 fast and have caching, optimized 🤖 around querying many components at a time
         performantly.
   - title: Component Hooks & Cleanup Traits
     details:
-        Component Hooks 🪝 & Cleanup Traits allow you to enforce invariants and attach lifecycles to your entities.
+        Component Hooks 🪝 & Cleanup Traits allow you to enforce 👮 invariants and attach lifecycles 🧬 to your
+        entities.
   - title: First-Class Monitors / Observers
     details:
-        Query monitors let you track entities and when they change shape in an efficient 🚀 way, enabling you to track
-        changes or store data swiftly 💨 and safely outside of the ECS.
+        Query monitors 🖥️ let you track entities and when they change shape in an efficient 🚀 way, enabling you to
+        track changes or store data swiftly 💨 and safely 👷 outside of the ECS.
   - title: Zero Dependency API
     details:
-        B2's API has zero dependencies, making it lightweight 🪶 and portable.
+        B2's API has zero dependencies, making it lightweight 🪶 and portable 💼.
   - title: Strictly Typed
     details:
         Internal APIs are typechecked, and the library has Luau & Typescript typings for breakneck 🤸 development pace
-        and safe code.
+        and safe 🦺 code.
 ---
