@@ -1,0 +1,33 @@
+{
+  "name": "@rbxts/b2264644-3d77-4ab9-8a00-5e9ffb0ff964",
+  "version": "0.2.3",
+  "description": "A fast entity component system for luau.",
+  "main": "./src/init.luau",
+  "author": "@rbxts",
+  "license": "MIT",
+  "module": "commonjs",
+  "repository": "https://github.com/hardlyardi/b226",
+  "homepage": "https://b2.ardi.gg/",
+  "devDependencies": {
+    "@rbxts/compiler-types": "^2.2.0-types.0",
+    "@rbxts/types": "^1.0.761",
+    "@typescript-eslint/eslint-plugin": "^8.31.0",
+    "@typescript-eslint/parser": "^8.31.0",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.2",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-roblox-ts": "^0.0.36",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.2",
+    "vitepress": "^1.6.3"
+  },
+  "types": "./src/index.d.ts",
+  "files": [
+    "./src"
+  ],
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  }
+}

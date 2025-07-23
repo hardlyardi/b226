@@ -1,0 +1,68 @@
+name: deploy-docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/**/*
+      - .github/workflows/docs.yml
+      - package.json
+  pull_request:
+  workflow_dispatch:
+  merge_group:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # we only want to clone the documentation here
+          sparse-checkout: |
+            docs/
+            package.json
+            package-lock.json
+          sparse-checkout-cone-mode: false
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Install dependencies
+        run: npm ci
+      - name: Build with VitePress
+        run: npm run docs:build
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  # Deployment job
+  deploy:
+    if: ${{ github.repository == 'hardlyardi/b226' }}
+
+    environment:
+      name: deploy-docs
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
