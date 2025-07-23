@@ -130,7 +130,7 @@ local function component_record(component: number | Ent): string
 	local id_record = ecsi.cindex[component :: number]
 	if not id_record then return `{ent_name(component)} Record \{!NO RECORD!}` end
 	local id_record_flags = INDEX(id_record, b2i.idr_flags)
-	local flags_list = {}
+	local flags_list: { string } = {}
 	if bit32.btest(id_record_flags, b2i.IDFLAG_TAG) then
 		table.insert(flags_list, "DATALESS")
 	else
@@ -143,6 +143,12 @@ local function component_record(component: number | Ent): string
 	end
 	if bit32.btest(id_record_flags, b2i.IDFLAG_DELETE_ONDELETETARGET) then
 		table.insert(flags_list, "DELETES ON DELETE TARGET")
+	end
+	if bit32.btest(id_record_flags, b2i.IDFLAG_DELETE_ONCLEARASRELATION) then
+		table.insert(flags_list, "DELETES ON CLEAR AS RELATION")
+	end
+	if bit32.btest(id_record_flags, b2i.IDFLAG_DELETE_ONDELETEASRELATION) then
+		table.insert(flags_list, "DELETES ON DELETE AS RELATION")
 	end
 	if bit32.btest(id_record_flags, b2i.IDFLAG_EXCLUSIVE) then table.insert(flags_list, "EXCLUSIVE RELATION") end
 	if bit32.btest(id_record_flags, b2i.IDFLAG_HOOK_ONADD) then table.insert(flags_list, "HOOK_ONADD") end
