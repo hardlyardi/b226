@@ -31,7 +31,7 @@
     // wretched 4 tabsize
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
-    "prettier.useTabs": false,
+    "prettier.useTabs": true,
     "editor.detectIndentation": false,
     // charmed icons
     "charmed-icons.associations.extensions": {

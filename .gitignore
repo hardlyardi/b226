@@ -7,5 +7,10 @@ _SUITE/**
 # Place files
 **.rbxl*
 
+# JS
+node_modules/
+**/.vitepress/dist
+**/.vitepress/cache
+
 # Lock files
 **.lock
