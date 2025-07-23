@@ -4,6 +4,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
     title: "B226",
     description: "An entity component system for Luau.",
+    base: "/b226/",
     
     themeConfig: {
         // https://vitepress.dev/reference/default-theme-config
