@@ -8,6 +8,9 @@
   "module": "commonjs",
   "repository": "https://github.com/hardlyardi/b226",
   "homepage": "https://b2.ardi.gg/",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@rbxts/compiler-types": "^2.2.0-types.0",
     "@rbxts/types": "^1.0.761",
