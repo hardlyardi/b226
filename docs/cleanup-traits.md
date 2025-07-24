@@ -9,10 +9,11 @@ next:
 # Cleanup Traits
 
 When entities that are used as tags, components, relationships or relationship targets are deleted, cleanup traits
-ensure that the store does not contain any dangling references. Any cleanup policy provides this guarantee, so while
-they are configurable, games cannot configure traits that allows for dangling references.
+associate components to an entity's lifetime. References to ids in storage are always removed before the id is deleted.
+However, cleanup traits allow you to be more specific about what should happen to entities referencing an id before that
+id is deleted.
 
-To configure a cleanup policy for an entity, a (Condition, Action) pair can be added to it. If no policy is specified,
+To configure a cleanup trait for an entity, a (Condition, Action) pair can be added to it. If no policy is specified,
 the id will be removed on cleanup.
 
 Right now, there are six cleanup conditions:

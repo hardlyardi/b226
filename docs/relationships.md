@@ -12,9 +12,9 @@ next:
 
 Entity relationships (pairs) make it possible to describe a graph of entities efficiently in your data.
 
-Adding/removing pairs is similar to adding/removing regular Ids, with as difference that instead of a single Id, a
-relationship adds a pair of two Ids to an entity. In this pair, the first element represents the relationship
-(e.g. "Eats"), and the second element represents the target (e.g. "Apples").
+Adding/removing pairs is the same as adding/removing regular Ids, a relationship adds that pair specifically to an
+entity. Pair order is not commutative - I.e., pair(A,B) =/= pair(B,A). In this pair, the first element represents the
+relation (e.g. "Eats"), and the second element represents the target (e.g. "Apples").
 
 Relationships can be used to describe many things, from hierarchies, to status effects, to even transactions between
 player inventories. They can be created with `b2.pair(relationship, target)`. To get the target of a relationship, use
