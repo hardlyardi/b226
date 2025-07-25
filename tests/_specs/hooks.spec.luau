@@ -14,6 +14,7 @@ local A = ecs.component()
 local B = ecs.component()
 
 local e1 = ecs.entity()
+local e2 = ecs.entity()
 
 PREFIX("OnAdd")
 
@@ -53,6 +54,23 @@ TEST("adding component during hook", function(interface)
 	ecs.add(e1, A)
 	interface:expect_truthy(ecs.has(e1, A))
 	interface:expect_truthy(ecs.has(e1, B))
+end)
+
+TEST("invokes on cached edge", function(interface)
+	local a_count = 0
+	local b_count = 0
+	ecs.set(A, b2.OnAdd, function()
+		a_count += 1
+	end)
+	ecs.set(B, b2.OnAdd, function()
+		b_count += 1
+	end)
+	ecs.add(e1, A)
+	ecs.add(e2, A)
+	interface:expect_equal(a_count, 2)
+	ecs.add(e1, B)
+	ecs.add(e2, B)
+	interface:expect_equal(b_count, 2)
 end)
 
 PREFIX("OnChange")
@@ -120,6 +138,29 @@ TEST("adding component during hook", function(interface)
 	ecs.set(e1, A, "meow")
 	ecs.remove(e1, A)
 	interface:expect_truthy(ecs.has(e1, B))
+end)
+
+TEST("invokes on cached edge", function(interface)
+	local a_count = 0
+	local b_count = 0
+	ecs.set(A, b2.OnRemove, function()
+		a_count += 1
+	end)
+	ecs.set(B, b2.OnRemove, function()
+		b_count += 1
+	end)
+	ecs.add(e1, A)
+	ecs.add(e2, A)
+	ecs.add(e1, B)
+	ecs.add(e2, B)
+	interface:expect_equal(a_count, 0)
+	interface:expect_equal(b_count, 0)
+	ecs.remove(e1, A)
+	ecs.remove(e2, A)
+	interface:expect_equal(a_count, 2)
+	ecs.remove(e1, B)
+	ecs.remove(e2, B)
+	interface:expect_equal(b_count, 2)
 end)
 
 return DONE()
