@@ -31,8 +31,6 @@ type Sorted<Tbl> = Tbl
 type Bitset = U32
 -- List of entity IDs. Components are entities as well.
 type IdList = { U53 }
--- Observable event ID
-type ObservableEventId = U53
 
 type ArchLocation = U26
 type ArchHash = string
@@ -44,6 +42,8 @@ type Arch = {
 	location: ArchLocation,
 	-- ORDERED_HASH of the archetype's sorted Id list
 	hash: ArchHash,
+	-- sorted list of monitors which match this archetype, used for comparisons
+	matching_monitors: Sorted<{ MonitorId }> | false,
 
 	--[[B2 Archetypes use of Bitsets
 	A bitset is a list of single-bit flags. Archetypes in B2 are queried for components via bitsets, where every
@@ -56,17 +56,17 @@ type Arch = {
 	well, the paged bitset is limited to 32*32 bits, i.e., 1024 components. Component columns outside of this range are
 	not stored as any part of this bitset.
 	]]
-	pages_record: Bitset,
+	pages_record: PageRecord,
 	bitset_pages: buffer,
 
 	ids: Sorted<IdList>,
+	ids_columns: { Column },
 
 	-- list of rows which are 'empty', - I.e., their value is false, they have been removed, and are waiting to be
 	-- removed completely.
 	empty_rows: { Row },
 	-- entities
 	ents: { [Row]: U53 | false },
-	columns_dense: { [U26]: Column },
 	-- map of component IDs to columns
 	columns_map: Set<U53, Column>,
 }
@@ -135,8 +135,6 @@ type IdRecord = {
 	-- Used to describe how "many" of this component exist in each archetype. This is only important for relationships
 	-- (a.k.a. pairs.) More info @ https://ajmmertens.medium.com/a-roadmap-to-entity-relationships-5b1d11ebb4eb
 	_dense_counts: { [U26]: number },
-	-- Row monitors for this Id.
-	_monitors: { Monitor }?,
 }
 local idr_flags: "_flags" = 1 :: any
 local idr_hooks: "_hooks" = 2 :: any
@@ -145,7 +143,6 @@ local idr_arch_count: "_arch_count" = 4 :: any
 local idr_dense_cached: "_dense_cached" = 5 :: any
 local idr_dense_column: "_dense_column" = 6 :: any
 local idr_dense_counts: "_dense_counts" = 7 :: any
-local idr_monitors: "_monitors" = 8 :: any
 
 type InternalOnAddHook = (entity: U53, id: U53, data: any?) -> ()
 type InternalOnChangeHook = (entity: U53, id: U53, data: any) -> ()
@@ -175,7 +172,9 @@ type Observer<Parameters... = ...any> = {
 	match: QueryMatcher,
 }
 
-type Monitor = Observer<U53, Arch, Row>
+type MonitorId = U53
+type MonitorEvent = "added" | "removed"
+type MonitorCallback = (MonitorEvent, U53, src: Arch, dst: Arch, Row) -> ()
 
 local function INDEX<Indexable, Index>(indexable: Indexable, index: Index): index<Indexable, Index>
 	return (indexable :: any)[index]
@@ -188,16 +187,18 @@ local F64_BYTES = 8
 
 --stylua: ignore start
 local IDFLAG_TAG                       = 0b10 ^ 0
-local IDFLAG_DELETE_ONCLEAR            = 0b10 ^ 1
-local IDFLAG_DELETE_ONDELETE           = 0b10 ^ 2
-local IDFLAG_DELETE_ONCLEARTARGET      = 0b10 ^ 3
-local IDFLAG_DELETE_ONDELETETARGET     = 0b10 ^ 4
-local IDFLAG_DELETE_ONCLEARASRELATION  = 0b10 ^ 5
-local IDFLAG_DELETE_ONDELETEASRELATION = 0b10 ^ 6
-local IDFLAG_EXCLUSIVE                 = 0b10 ^ 7
-local IDFLAG_HOOK_ONADD                = 0b10 ^ 8
-local IDFLAG_HOOK_ONCHANGE             = 0b10 ^ 9
-local IDFLAG_HOOK_ONREM                = 0b10 ^ 10
+local IDFLAG_MAYBEIMPLICIT             = 0b10 ^ 1
+local IDFLAG_TRANSITIVE                = 0b10 ^ 2
+local IDFLAG_DELETE_ONCLEAR            = 0b10 ^ 3
+local IDFLAG_DELETE_ONDELETE           = 0b10 ^ 4
+local IDFLAG_DELETE_ONCLEARTARGET      = 0b10 ^ 5
+local IDFLAG_DELETE_ONDELETETARGET     = 0b10 ^ 6
+local IDFLAG_DELETE_ONCLEARASRELATION  = 0b10 ^ 7
+local IDFLAG_DELETE_ONDELETEASRELATION = 0b10 ^ 8
+local IDFLAG_EXCLUSIVE                 = 0b10 ^ 9
+local IDFLAG_HOOK_ONADD                = 0b10 ^ 10
+local IDFLAG_HOOK_ONCHANGE             = 0b10 ^ 11
+local IDFLAG_HOOK_ONREM                = 0b10 ^ 12
 
 local EMASK_LO = 0b10 ^ 24
 local EMASK_GENERATION = 0b10^16
@@ -207,24 +208,26 @@ local COMPONENT_PAGE_RECORD_SIZE = 32
 local MAX_PAGED_COMPONENT = COMPONENT_PAGE_SIZE * COMPONENT_PAGE_RECORD_SIZE
 local MAX_COMPONENT = MAX_PAGED_COMPONENT - 64
 --[[ecs builtins]]
-local B2Component             = MAX_COMPONENT + 1
-local B2Name                  = MAX_COMPONENT + 2
-local B2Exclusive             = MAX_COMPONENT + 3
-local B2Wildcard              = MAX_COMPONENT + 4
-local B2ChildOf               = MAX_COMPONENT + 5
+local B2Component          = MAX_COMPONENT + 1
+local B2Name               = MAX_COMPONENT + 2
+local B2Exclusive          = MAX_COMPONENT + 3
+local B2Transitive         = MAX_COMPONENT + 4
+local B2Wildcard           = MAX_COMPONENT + 5
+local B2IsA                = MAX_COMPONENT + 6
+local B2ChildOf            = MAX_COMPONENT + 7
 --[[cleanup conditons]]
-local B2OnClear               = MAX_COMPONENT + 6
-local B2OnDelete              = MAX_COMPONENT + 7
-local B2OnClearTarget         = MAX_COMPONENT + 8
-local B2OnDeleteTarget        = MAX_COMPONENT + 9
-local B2OnClearAsRelation     = MAX_COMPONENT + 10
-local B2OnDeleteAsRelation    = MAX_COMPONENT + 11
+local B2OnClear            = MAX_COMPONENT + 8
+local B2OnDelete           = MAX_COMPONENT + 9
+local B2OnClearTarget      = MAX_COMPONENT + 10
+local B2OnDeleteTarget     = MAX_COMPONENT + 11
+local B2OnClearAsRelation  = MAX_COMPONENT + 12
+local B2OnDeleteAsRelation = MAX_COMPONENT + 13
 --[[cleanup actions]]
-local B2CleanupDelete         = MAX_COMPONENT + 12
+local B2CleanupDelete      = MAX_COMPONENT + 14
 --[[hooks]]
-local B2OnAdd                 = MAX_COMPONENT + 13
-local B2OnRemove              = MAX_COMPONENT + 14
-local B2OnChange              = MAX_COMPONENT + 15
+local B2OnAdd              = MAX_COMPONENT + 15
+local B2OnRemove           = MAX_COMPONENT + 16
+local B2OnChange           = MAX_COMPONENT + 17
 --stylua: ignore end
 
 local function ASSERT<Condition>(condition: Condition, msg: string?): typeof(assert(... :: Condition))
@@ -307,9 +310,12 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 	local cindex: Set<U53, IdRecord> = {}
 
 	local eindex_dense: Set<U26, U53> = {}
-	local eindex_sparse: Set<U24, EntRecord> = {}
+	local eindex_sparse: Set<U26, EntRecord> = {}
 	local eindex_alive_count: number = 0
 	local eindex_id_top: number = 0
+
+	local num_monitors: MonitorId = 0
+	local monitor_callbacks: Set<MonitorId, MonitorCallback> = {}
 
 	local user_components_count: number = 0
 
@@ -353,6 +359,61 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			return (record_dense <= eindex_alive_count) and (eindex_dense[record_dense] == entity)
 		end
 		return false
+	end
+
+	local function invoke_monitors_slow(entity: U53, src: Arch, dst: Arch, row: Row): ()
+		local src_list = src.matching_monitors
+		local dst_list = dst.matching_monitors
+		if src_list then
+			local src_count = #src_list
+			if dst_list then
+				local dst_count = #dst_list
+				do
+					local src_index = 1
+					for dst_index = 1, dst_count do
+						local dst_id = dst_list[dst_index]
+						local src_id = src_list[src_index]
+						while src_id and src_id < dst_id do
+							src_index += 1
+							src_id = src_list[src_index]
+						end
+						if dst_id ~= src_id then
+							monitor_callbacks[dst_id]("added", entity, src, dst, row)
+							if src_id then continue end
+							for dst_index = dst_index + 1, dst_count do
+								monitor_callbacks[dst_list[dst_index]]("added", entity, src, dst, row)
+							end
+						end
+					end
+				end
+				do
+					local dst_index = 1
+					for src_index = 1, src_count do
+						local src_id = src_list[src_index]
+						local dst_id = dst_list[dst_index]
+						while dst_id and dst_id < src_id do
+							dst_index += 1
+							dst_id = dst_list[dst_index]
+						end
+						if src_id ~= dst_id then
+							monitor_callbacks[src_id]("removed", entity, src, dst, row)
+							if dst_id then continue end
+							for src_index = src_index + 1, src_count do
+								monitor_callbacks[src_list[src_index]]("removed", entity, src, dst, row)
+							end
+						end
+					end
+				end
+			else
+				for src_index = 1, src_count do
+					monitor_callbacks[src_list[src_index]]("removed", entity, src, dst, row)
+				end
+			end
+		elseif dst_list then
+			for dst_index = 1, #dst_list do
+				monitor_callbacks[dst_list[dst_index]]("added", entity, src, dst, row)
+			end
+		end
 	end
 
 	local function ecs_arch_data(
@@ -467,7 +528,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		local empty_rows_count = #empty_rows
 		if empty_rows_count == 0 then return end
 		local entities = arch.ents
-		local columns = arch.columns_dense
+		local columns = arch.ids_columns
 		local columns_count = #columns
 		local last_row = #entities
 		if empty_rows_count == last_row then
@@ -518,7 +579,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 	src_row should always be an occupied row in the src archetype
 	]=]
 	local function arch_move(src: Arch, src_entity: U53, src_row: Row, dst: Arch, dst_row: Row): ()
-		local src_columns = src.columns_dense
+		local src_columns = src.ids_columns
 		local src_entities = src.ents
 		local src_ids = src.ids
 		local src_empty_rows = src.empty_rows
@@ -711,11 +772,11 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			end
 		end
 
-		local id_target = arch.ids[id_target_index]
+		local id_pair = arch.ids[id_target_index]
 
-		if not id_target then return nil end
+		if not id_pair then return nil end
 
-		local alive = ent_try_latest_alive(ENT_PAIR_LO(id_target))
+		local alive = ent_try_latest_alive(ENT_PAIR_LO(id_pair))
 
 		return alive
 	end
@@ -761,6 +822,9 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			if ent_has_inline(relation, B2Exclusive) then
 				flags += IDFLAG_EXCLUSIVE
 			end
+			if (relation == B2Wildcard) or (target == B2Wildcard) then
+				flags += IDFLAG_MAYBEIMPLICIT
+			end
 
 			if ecs_target(relation, B2OnClearTarget) == B2CleanupDelete then
 				flags += IDFLAG_DELETE_ONCLEARTARGET
@@ -775,12 +839,20 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 				flags += IDFLAG_DELETE_ONDELETEASRELATION
 			end
 		else
+			if ent_has_inline(id, ENT_PAIR(B2IsA, B2Wildcard)) or cindex[ENT_PAIR(B2IsA, id)] then
+				flags += IDFLAG_MAYBEIMPLICIT
+			end
 			if ecs_target(relation, B2OnClear) == B2CleanupDelete then
 				flags += IDFLAG_DELETE_ONCLEAR
 				flags += IDFLAG_DELETE_ONDELETE
 			elseif ecs_target(relation, B2OnDelete) == B2CleanupDelete then
 				flags += IDFLAG_DELETE_ONDELETE
 			end
+		end
+
+		if ent_has_inline(relation, B2Transitive) then
+			flags += IDFLAG_TRANSITIVE
+			flags = bit32.bor(flags, IDFLAG_MAYBEIMPLICIT)
 		end
 
 		component_eh = component_eh or ent_has_inline(relation, B2Component)
@@ -844,7 +916,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return (id_record_new(id))
 	end
 
-	local function id_record_arch_append(id_record: IdRecord, id: U53, arch: Arch, count: number): ()
+	local function id_record_insert_arch(id_record: IdRecord, arch: Arch, index: number): ()
 		local id_record_arch_sparse = INDEX(id_record, idr_arch_sparse)
 		local id_record_dense_counts = INDEX(id_record, idr_dense_counts)
 
@@ -860,7 +932,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 				id_record_arch_count
 
 			INDEX(id_record, idr_dense_cached)[id_record_arch_count] = arch
-			INDEX(id_record, idr_dense_column)[id_record_arch_count] = count
+			INDEX(id_record, idr_dense_column)[id_record_arch_count] = index
 			id_record_dense_counts[id_record_arch_count] = 1
 		end
 	end
@@ -933,6 +1005,93 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return list
 	end
 
+	local function arch_id_get_column(arch: Arch, columns_map: index<Arch, "columns_map">, id: U53): Column
+		local id_record = id_record_ensure(id)
+		local flags = INDEX(id_record, idr_flags)
+		if ENT_PAIR_EH(id) then
+			local relation = ENT_PAIR_HI(id)
+			local relation_wildcard = ENT_PAIR(relation, B2Wildcard)
+			if bit32.btest(flags, IDFLAG_TRANSITIVE) then
+				local column = columns_map[relation_wildcard]
+				if column then return column end
+			end
+		end
+		return if bit32.btest(flags, IDFLAG_TAG) then NULL_ARRAY else {}
+	end
+
+	local function arch_insert_id_column(
+		arch: Arch,
+		id: U53,
+		columns_map: index<Arch, "columns_map">,
+		ids_index: number,
+		append_column: Column
+	): ()
+		local id_record = id_record_ensure(id)
+		local flags = INDEX(id_record, idr_flags)
+		if ENT_PAIR_EH(id) then
+			local relation = ENT_PAIR_HI(id)
+			local object = ENT_PAIR_LO(id)
+			local reflexive = relation == B2IsA
+			if reflexive then
+				local object_id_record = id_record_ensure(object)
+				id_record_insert_arch(object_id_record, arch, ids_index)
+				columns_map[object] = append_column
+			end
+			local relation_wildcard = ENT_PAIR(relation, B2Wildcard)
+			local wildcard_object = ENT_PAIR(B2Wildcard, object)
+			local relation_wildcard_id_record = id_record_ensure(relation_wildcard)
+			if bit32.btest(flags, IDFLAG_TRANSITIVE) then
+				local object_ent_record = eindex_try_any_record(object) :: EntRecord
+				local object_arch = object_ent_record.arch
+				local object_arch_columns_map = object_arch.columns_map
+
+				-- TODO: Consider storing successive IDs explicitly in an ID record to maintain immutability of transitive
+				-- relationships more firmly
+				for successive_id in object_arch_columns_map do
+					-- we only want pairs
+					if not ENT_PAIR_EH(successive_id) then continue end
+					local target = ENT_PAIR_LO(successive_id)
+					-- we do not want wildcard target pairs for this
+					if target == B2Wildcard then continue end
+					-- we only want the ID if the relation matches the transivity we're looking for
+					if ENT_PAIR_HI(successive_id) ~= relation then continue end
+					if columns_map[successive_id] then continue end
+
+					local successive_id_record = cindex[successive_id] :: IdRecord
+
+					id_record_insert_arch(successive_id_record, arch, ids_index)
+					columns_map[successive_id] = append_column
+
+					id_record_insert_arch(relation_wildcard_id_record, arch, ids_index)
+
+					local wildcard_target = ENT_PAIR(B2Wildcard, target)
+					local wildcard_target_id_record = id_record_ensure(wildcard_target)
+					id_record_insert_arch(wildcard_target_id_record, arch, ids_index)
+					columns_map[wildcard_target] = append_column
+
+					if reflexive then
+						local target_id_record = id_record_ensure(target)
+						id_record_insert_arch(target_id_record, arch, ids_index)
+						columns_map[target] = append_column
+					end
+				end
+			end
+
+			id_record_insert_arch(relation_wildcard_id_record, arch, ids_index)
+			columns_map[relation_wildcard] = append_column
+
+			local wildcard_object_id_record = id_record_ensure(wildcard_object)
+			id_record_insert_arch(wildcard_object_id_record, arch, ids_index)
+			columns_map[wildcard_object] = append_column
+		else
+			if ent_has_inline(id, ENT_PAIR(B2IsA, B2Wildcard)) then
+				arch_insert_id_column(arch, ENT_PAIR(B2IsA, id), columns_map, ids_index, append_column)
+			end
+		end
+
+		id_record_insert_arch(id_record, arch, ids_index)
+	end
+
 	local function arch_new(agraph_node: ArchGraphNode): Arch
 		local ids = agraph_node.ids
 		local hash = buffer.tostring(ids)
@@ -944,22 +1103,23 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		archetypes_count = arch_location
 
 		local id_count = #ids_list
-		local arch_columns_dense = table.create(id_count) :: { Column }
+		local arch_ids_columns = table.create(id_count) :: { Column }
 		local arch_columns_map = {} :: Set<U53, Column>
 
 		local arch: Arch = {
 			location = arch_location,
 			hash = hash,
+			matching_monitors = false,
 
 			pages_record = pages_record,
 			bitset_pages = pages_buff,
 
 			ids = ids_list,
+			ids_columns = arch_ids_columns,
 
 			empty_rows = {},
 
 			columns_map = arch_columns_map,
-			columns_dense = arch_columns_dense,
 			ents = {},
 		}
 		archetypes[archetypes_count] = arch
@@ -967,30 +1127,15 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 
 		for ids_index = 1, id_count do
 			local id = ids_list[ids_index]
-			local id_record = id_record_ensure(id)
-			local column = if bit32.btest(INDEX(id_record, idr_flags), IDFLAG_TAG) then NULL_ARRAY else {}
-			arch_columns_dense[ids_index] = column
+			local column = arch_id_get_column(arch, arch_columns_map, id)
+			arch_ids_columns[ids_index] = column
 			arch_columns_map[id] = column
-			if ENT_PAIR_EH(id) then
-				local relation = ENT_PAIR_HI(id)
-				local object = ENT_PAIR_LO(id)
-				local relation_wildcard = ENT_PAIR(relation, B2Wildcard)
-				local relation_wildcard_id_record = id_record_ensure(relation_wildcard)
-				id_record_arch_append(relation_wildcard_id_record, relation_wildcard, arch, ids_index)
-				arch_columns_map[relation_wildcard] = column
-
-				local wildcard_object = ENT_PAIR(B2Wildcard, object)
-				local wildcard_object_id_record = id_record_ensure(wildcard_object)
-				id_record_arch_append(wildcard_object_id_record, wildcard_object, arch, ids_index)
-				arch_columns_map[wildcard_object] = column
-			end
-			id_record_arch_append(id_record, id, arch, ids_index)
+			arch_insert_id_column(arch, id, arch_columns_map, ids_index, column)
 		end
 		for id in arch_columns_map do
 			local observer_cache = observe_arch_added[id]
 			if observer_cache then
-				local observer_cache_count = #observer_cache
-				for observer_cache_index = 1, observer_cache_count do
+				for observer_cache_index = 1, #observer_cache do
 					local observer = observer_cache[observer_cache_index]
 					if observer.match(arch) then observer.callback(arch) end
 				end
@@ -1123,21 +1268,26 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return (agraph_traverse_add(src, id))
 	end
 
+	local function buff_remove_id(buff: buffer, remove_ptr: Ptr): buffer
+		local resized_len = buffer.len(buff) - F64_BYTES
+		local resized_buff = buffer.create(resized_len)
+
+		if remove_ptr == resized_len then
+			buffer.copy(resized_buff, 0, buff, 0, resized_len)
+		else
+			buffer.copy(resized_buff, 0, buff, 0, remove_ptr)
+			buffer.copy(resized_buff, remove_ptr, buff, remove_ptr + F64_BYTES)
+		end
+
+		return resized_buff
+	end
+
 	local function agraph_traverse_rem(src: ArchGraphNode, id: U53): ArchGraphNode
 		local src_ids = src.ids
-		local src_ids_len = buffer.len(src_ids)
-		local src_ids_top: Ptr = src_ids_len - F64_BYTES
 
-		local traversed_ids_len = src_ids_len - F64_BYTES
-		local traversed_ids = buffer.create(traversed_ids_len)
-		local remove_ptr = binary_search(src_ids, id) :: number
+		local remove_ptr = ASSERT(binary_search(src_ids, id), "Internal Error")
 
-		if remove_ptr == src_ids_top then
-			buffer.copy(traversed_ids, 0, src_ids, 0, traversed_ids_len)
-		else
-			buffer.copy(traversed_ids, 0, src_ids, 0, remove_ptr) --
-			buffer.copy(traversed_ids, remove_ptr, src_ids, remove_ptr + F64_BYTES) --
-		end
+		local traversed_ids = buff_remove_id(src_ids, remove_ptr)
 
 		local hash = buffer.tostring(traversed_ids)
 		do
@@ -1173,13 +1323,11 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		if not record then return end
 
 		local record_arch = record.arch
-		local didnt_move = record_arch.columns_map[id]
-		if didnt_move then return end
+		if record_arch.columns_map[id] then return end
 		local start_arch = record_arch
 
 		local id_record = id_record_ensure(id)
 		local flags = INDEX(id_record, idr_flags)
-		local monitors = INDEX(id_record, idr_monitors)
 		local relation = id
 		local dst_node: ArchGraphNode
 		if ENT_PAIR_EH(id) and bit32.btest(flags, IDFLAG_EXCLUSIVE) then
@@ -1187,7 +1335,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local target = ecs_target(entity, relation)
 			if target then
 				local pair = ENT_PAIR(relation, target)
-
 				if bit32.btest(flags, IDFLAG_HOOK_ONREM) then
 					local hooks = INDEX(id_record, idr_hooks)
 					local on_rem = INDEX(hooks, hks_remove);
@@ -1219,15 +1366,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 
 		local dst_arch = agraph_ensure_arch(dst_node)
 		local dst_row = ent_move(entity, record, record_arch, dst_arch)
-		if monitors then
-			for monitors_index = 1, #monitors do
-				local monitor = monitors[monitors_index]
-				local match = monitor.match
-				if (not match(start_arch)) and match(dst_arch) then
-					monitor.callback(entity, dst_arch, dst_row) --
-				end
-			end
-		end
+
+		invoke_monitors_slow(entity, start_arch, dst_arch, dst_row)
 	end
 
 	local function ecs_bulk_add(entity: U53, add_ids: { U53 }): ()
@@ -1239,7 +1379,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		local record_column_map = record_arch.columns_map
 		local dst_node = agraph[record_arch.hash]
 
-		local check_monitors: Set<Monitor> = {}
 		for add_ids_index = 1, #add_ids do
 			local id = add_ids[add_ids_index]
 
@@ -1247,12 +1386,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 
 			local id_record = id_record_ensure(id)
 			local flags = INDEX(id_record, idr_flags)
-			local monitors = INDEX(id_record, idr_monitors)
-			if monitors then
-				for monitors_index = 1, #monitors do
-					check_monitors[monitors[monitors_index]] = true
-				end
-			end
 			local relation = id
 			if ENT_PAIR_EH(id) and bit32.btest(flags, IDFLAG_EXCLUSIVE) then
 				relation = ENT_PAIR_HI(id)
@@ -1290,13 +1423,9 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		end
 
 		local dst_arch = agraph_ensure_arch(dst_node)
-		local dst_row = ent_move(entity, record, record_arch, dst_arch)
-
-		for monitor in check_monitors do
-			local match = monitor.match
-			if (not match(start_arch)) and match(dst_arch) then
-				monitor.callback(entity, dst_arch, dst_row) --
-			end
+		if start_arch ~= dst_arch then
+			local dst_row = ent_move(entity, record, record_arch, dst_arch)
+			invoke_monitors_slow(entity, start_arch, dst_arch, dst_row)
 		end
 	end
 
@@ -1333,7 +1462,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local start_arch = record_arch
 			local id_record = id_record_ensure(id)
 			local flags = INDEX(id_record, idr_flags)
-			local monitors = INDEX(id_record, idr_monitors)
 			local relation = id
 			local dst_node: ArchGraphNode
 			if ENT_PAIR_EH(id) and bit32.btest(flags, IDFLAG_EXCLUSIVE) then
@@ -1374,15 +1502,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			column = dst_arch.columns_map[id]
 			local dst_row = ent_move(entity, record, record_arch, dst_arch)
 			column[dst_row] = data
-			if monitors then
-				for monitors_index = 1, #monitors do
-					local monitor = monitors[monitors_index]
-					local match = monitor.match
-					if (not match(start_arch)) and match(dst_arch) then
-						monitor.callback(entity, dst_arch, dst_row) --
-					end
-				end
-			end
+
+			invoke_monitors_slow(entity, start_arch, dst_arch, dst_row)
 		end
 	end
 
@@ -1396,8 +1517,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 
 		local set_ids_count = #set_ids
 
-		local monitor_lists: { { Monitor } }?
-		local monitor_lists_count: number
 		local dst_node = agraph[record_arch.hash]
 		for set_ids_index = 1, set_ids_count do
 			local id = set_ids[set_ids_index]
@@ -1406,16 +1525,6 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			if column then
 				local id_record = cindex[id]
 				local flags = INDEX(id_record, idr_flags)
-				local monitors = INDEX(id_record, idr_monitors)
-				if monitors then
-					if monitor_lists then
-						monitor_lists_count += 1
-						monitor_lists[monitor_lists_count] = monitors
-					else
-						monitor_lists_count = 1
-						monitor_lists = { monitors }
-					end
-				end
 				if bit32.btest(flags, IDFLAG_HOOK_ONCHANGE) then
 					local hooks = INDEX(id_record, idr_hooks)
 					local hks_change = INDEX(hooks, hks_change);
@@ -1445,6 +1554,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 							local new_arch = record.arch
 							if new_arch ~= record_arch then
 								record_arch = new_arch
+								record_arch_column_map = record_arch.columns_map
 								dst_node = agraph[record_arch.hash]
 							end
 						end
@@ -1467,28 +1577,32 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		end
 
 		local dst_arch = agraph_ensure_arch(dst_node)
-		local dst_row = ent_move(entity, record, record_arch, dst_arch)
-		local dst_column_map = dst_arch.columns_map
+		if start_arch ~= dst_arch then
+			local dst_row = ent_move(entity, record, record_arch, dst_arch)
+			local dst_column_map = dst_arch.columns_map
 
-		for ids_index = 1, set_ids_count do
-			local id = set_ids[ids_index]
-			local column = dst_column_map[id]
-			if column == NULL_ARRAY then continue end
-			if not column then continue end
+			for ids_index = 1, set_ids_count do
+				local id = set_ids[ids_index]
+				local column = dst_column_map[id]
+				if column == NULL_ARRAY then continue end
+				if not column then continue end
 
-			local id_data = data[ids_index]
-			column[dst_row] = id_data
-		end
-		if monitor_lists then
-			for monitor_lists_index = 1, monitor_lists_count do
-				local monitors = monitor_lists[monitor_lists_index]
-				for monitors_index = 1, #monitors do
-					local monitor = monitors[monitors_index]
-					local match = monitor.match
-					if (not match(start_arch)) and match(dst_arch) then
-						monitor.callback(entity, dst_arch, dst_row) --
-					end
-				end
+				local id_data = data[ids_index]
+				column[dst_row] = id_data
+			end
+
+			invoke_monitors_slow(entity, start_arch, dst_arch, dst_row)
+		else
+			local dst_row = RECORD_ENSURE_ROW(record, record_arch, entity)
+
+			for ids_index = 1, set_ids_count do
+				local id = set_ids[ids_index]
+				local column = record_arch_column_map[id]
+				if column == NULL_ARRAY then continue end
+				if not column then continue end
+
+				local id_data = data[ids_index]
+				column[dst_row] = id_data
 			end
 		end
 	end
@@ -1498,15 +1612,59 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		if not record then return end
 
 		local record_arch = record.arch
-		local record_column_map = record_arch.columns_map
-		local column = record_column_map[id]
-		if not column then return end
+		if not record_arch.columns_map[id] then return end
 		local start_arch = record_arch
 
-		local id_record = id_record_ensure(id)
-		local flags = INDEX(id_record, idr_flags)
-		local monitors = INDEX(id_record, idr_monitors)
 		local dst_node: ArchGraphNode
+
+		local id_record = cindex[id] :: IdRecord
+		local flags = INDEX(id_record, idr_flags)
+		if bit32.btest(flags, IDFLAG_MAYBEIMPLICIT) then
+			local archetypes_sparse = INDEX(id_record, idr_arch_sparse)
+			local column_locations = INDEX(id_record, idr_dense_column)
+			local dense_location = archetypes_sparse[record_arch]
+			local associated_position = column_locations[dense_location]
+
+			local arch_ids = record_arch.ids
+			local associated_id = arch_ids[associated_position]
+			if associated_id ~= id then
+				id = associated_id
+				id_record = cindex[id] :: IdRecord
+				flags = INDEX(id_record, idr_flags)
+			end
+
+			if ENT_PAIR_EH(id) and bit32.btest(flags, IDFLAG_TRANSITIVE) and not bit32.btest(flags, IDFLAG_EXCLUSIVE) then
+				local relation = ENT_PAIR_HI(id)
+				local relation_wildcard = ENT_PAIR(relation, B2Wildcard)
+
+				local relation_wildcard_id_record = cindex[relation_wildcard] :: IdRecord
+				local relation_wildcard_archetypes_sparse = INDEX(relation_wildcard_id_record, idr_arch_sparse)
+				local relation_wildcard_dense_location = relation_wildcard_archetypes_sparse[record_arch]
+				local column_start = INDEX(relation_wildcard_id_record, idr_dense_column)[relation_wildcard_dense_location]
+				local count = INDEX(relation_wildcard_id_record, idr_dense_counts)[relation_wildcard_dense_location]
+				local columns_map = record_arch.columns_map
+				dst_node = agraph[record_arch.hash]
+				for index = column_start, column_start + count - 1 do
+					local dependent = arch_ids[index]
+					if not columns_map[dependent] then continue end
+					local dependent_id_record = cindex[dependent]
+					local dependent_flags = INDEX(dependent_id_record, idr_flags)
+					if bit32.btest(dependent_flags, IDFLAG_HOOK_ONREM) then
+						local hooks = INDEX(dependent_id_record, idr_hooks)
+						local on_rem = INDEX(hooks, hks_remove);
+						(on_rem :: typeof(assert(on_rem)))(entity, dependent)
+						local new_arch = record.arch
+						if new_arch ~= record_arch then
+							record_arch = new_arch
+							columns_map = record_arch.columns_map
+							dst_node = agraph[record_arch.hash]
+						end
+					end
+					dst_node = agraph_traverse_rem_ensure(dst_node, dependent)
+				end
+			end
+		end
+
 		if bit32.btest(flags, IDFLAG_HOOK_ONREM) then
 			local hooks = INDEX(id_record, idr_hooks)
 			local on_rem = INDEX(hooks, hks_remove);
@@ -1519,15 +1677,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		dst_node = agraph_traverse_rem_ensure(dst_node, id)
 		local dst_arch = agraph_ensure_arch(dst_node)
 		local dst_row = ent_move(entity, record, record_arch, dst_arch)
-		if monitors then
-			for monitors_index = 1, #monitors do
-				local monitor = monitors[monitors_index]
-				local match = monitor.match
-				if (not match(start_arch)) and match(dst_arch) then
-					monitor.callback(entity, dst_arch, dst_row) --
-				end
-			end
-		end
+
+		invoke_monitors_slow(entity, start_arch, dst_arch, dst_row)
 	end
 
 	local function ecs_bulk_remove(entity: U53, remove_ids: { U53 }): ()
@@ -1538,25 +1689,63 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		local start_arch = record_arch
 		local record_column_map = record_arch.columns_map
 
-		local monitor_lists: { { Monitor } }?
-		local monitor_lists_count: number
 		local dst_node = agraph[record_arch.hash]
 		for remove_ids_index = 1, #remove_ids do
 			local id = remove_ids[remove_ids_index]
 
 			if not record_column_map[id] then continue end
+
 			local id_record = id_record_ensure(id)
-			local monitors = INDEX(id_record, idr_monitors)
-			if monitors then
-				if monitor_lists then
-					monitor_lists_count += 1
-					monitor_lists[monitor_lists_count] = monitors
-				else
-					monitor_lists_count = 1
-					monitor_lists = { monitors }
+			local flags = INDEX(id_record, idr_flags)
+			if bit32.btest(flags, IDFLAG_MAYBEIMPLICIT) then
+				local archetypes_sparse = INDEX(id_record, idr_arch_sparse)
+				local column_locations = INDEX(id_record, idr_dense_column)
+				local dense_location = archetypes_sparse[record_arch]
+				local associated_position = column_locations[dense_location]
+
+				local arch_ids = record_arch.ids
+				local associated_id = arch_ids[associated_position]
+				if associated_id ~= id then
+					id = associated_id
+					id_record = cindex[id] :: IdRecord
+					flags = INDEX(id_record, idr_flags)
+				end
+
+				if
+					ENT_PAIR_EH(id)
+					and bit32.btest(flags, IDFLAG_TRANSITIVE)
+					and not bit32.btest(flags, IDFLAG_EXCLUSIVE)
+				then
+					local relation = ENT_PAIR_HI(id)
+					local relation_wildcard = ENT_PAIR(relation, B2Wildcard)
+
+					local relation_wildcard_id_record = cindex[relation_wildcard] :: IdRecord
+					local relation_wildcard_archetypes_sparse = INDEX(relation_wildcard_id_record, idr_arch_sparse)
+					local relation_wildcard_dense_location = relation_wildcard_archetypes_sparse[record_arch]
+					local column_start =
+						INDEX(relation_wildcard_id_record, idr_dense_column)[relation_wildcard_dense_location]
+					local count = INDEX(relation_wildcard_id_record, idr_dense_counts)[relation_wildcard_dense_location]
+					for index = column_start, column_start + count - 1 do
+						local dependent = arch_ids[index]
+						if not record_column_map[dependent] then continue end
+						local dependent_id_record = cindex[dependent]
+						local dependent_flags = INDEX(dependent_id_record, idr_flags)
+						if bit32.btest(dependent_flags, IDFLAG_HOOK_ONREM) then
+							local hooks = INDEX(dependent_id_record, idr_hooks)
+							local on_rem = INDEX(hooks, hks_remove);
+							(on_rem :: typeof(assert(on_rem)))(entity, dependent)
+							local new_arch = record.arch
+							if new_arch ~= record_arch then
+								record_arch = new_arch
+								record_column_map = record_arch.columns_map
+								dst_node = agraph[record_arch.hash]
+							end
+						end
+						dst_node = agraph_traverse_rem_ensure(dst_node, dependent)
+					end
 				end
 			end
-			local flags = INDEX(id_record, idr_flags)
+
 			if bit32.btest(flags, IDFLAG_HOOK_ONREM) then
 				local hooks = INDEX(id_record, idr_hooks)
 				local on_rem = INDEX(hooks, hks_remove);
@@ -1564,27 +1753,16 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 				local new_arch = record.arch
 				if new_arch ~= record_arch then
 					record_arch = new_arch
+					record_column_map = record_arch.columns_map
 					dst_node = agraph[record_arch.hash]
 				end
 			end
 			dst_node = agraph_traverse_rem_ensure(dst_node, id)
 		end
-
 		local dst_arch = agraph_ensure_arch(dst_node)
-		local dst_row: number?
-		dst_row = ent_move(entity, record, record_arch, dst_arch)
-		if monitor_lists then
-			dst_row = dst_row or 0
-			for monitor_lists_index = 1, monitor_lists_count do
-				local monitors = monitor_lists[monitor_lists_index]
-				for monitors_index = 1, #monitors do
-					local monitor = monitors[monitors_index]
-					local match = monitor.match
-					if (not match(start_arch)) and match(dst_arch) then
-						monitor.callback(entity, dst_arch, dst_row) --
-					end
-				end
-			end
+		if start_arch ~= dst_arch then
+			local dst_row = ent_move(entity, record, record_arch, dst_arch)
+			invoke_monitors_slow(entity, start_arch, dst_arch, dst_row)
 		end
 	end
 
@@ -2471,6 +2649,42 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return b2_each_iterator
 	end
 
+	local function binary_table_insert(tbl: { number }, value: number): number
+		local lower = 1
+		local upper = #tbl
+		while lower <= upper do
+			local middle = (lower + upper) // 2
+			local id = tbl[middle]
+
+			if id < value then
+				lower = middle + 1
+			elseif id > value then
+				upper = middle - 1
+			else
+				error("Internal Error", 3)
+			end
+		end
+		return upper + 1
+	end
+
+	local function binary_find(tbl: { number }, value: number): number
+		local lower = 1
+		local upper = #tbl
+		while lower <= upper do
+			local middle = (lower + upper) // 2
+			local id = tbl[middle]
+
+			if id < value then
+				lower = middle + 1
+			elseif id > value then
+				upper = middle - 1
+			else
+				return middle
+			end
+		end
+		error("Internal Error", 2)
+	end
+
 	local queryobj = {}
 	local queryobj_metatable = { __index = queryobj }
 	type QueryIdentityInternal = setmetatable<{
@@ -2498,7 +2712,12 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return self
 	end
 
+	function queryobj.locked(self: QueryIdentityInternal): boolean
+		return not not self._matcher
+	end
+
 	function queryobj.with(self: QueryIdentityInternal, ...: U53): QueryIdentityInternal
+		ASSERT(not self:locked(), "query is locked (already in use)")
 		local dense = self._with_dense
 		local dense_count = #dense
 		local sparse = self._sparse
@@ -2515,6 +2734,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 	end
 
 	function queryobj.without(self: QueryIdentityInternal, ...: U53): QueryIdentityInternal
+		ASSERT(not self:locked(), "query is locked (already in use)")
 		local dense = self._without_dense
 		local dense_count = #dense
 		local sparse = self._sparse
@@ -3067,128 +3287,37 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		return observer_destroy
 	end
 
-	function queryobj.monitor_added_row(self: QueryIdentityInternal, callback: (U53, Arch, Row) -> ()): () -> ()
-		local match = self:match()
+	function queryobj.monitor_rows(self: QueryIdentityInternal, callback: MonitorCallback): () -> ()
+		local this = num_monitors + 1
+		num_monitors = this
+		monitor_callbacks[this] = callback
 
-		local with_observer: Monitor = {
-			match = match,
-			callback = callback,
-		}
-
-		local with_dense = self._with_dense
-		local without_dense = self._without_dense
-		local with_dense_count = #with_dense
-		local without_dense_count = #without_dense
-
-		for with_index = 1, with_dense_count do
-			local id = with_dense[with_index]
-			local id_record = id_record_ensure(id)
-			local monitors = INDEX(id_record, idr_monitors)
-			if not monitors then
-				monitors = { with_observer }
-				-- Luau
-				(id_record :: any)[idr_monitors] = monitors
+		local function arch_added(arch: Arch): ()
+			local matching_monitors = arch.matching_monitors
+			if matching_monitors then
+				binary_table_insert(matching_monitors, this)
 			else
-				table.insert(monitors, with_observer)
+				arch.matching_monitors = { this }
 			end
 		end
-		for without_index = 1, without_dense_count do
-			local id = without_dense[without_index]
-			local id_record = id_record_ensure(id)
-			local monitors = INDEX(id_record, idr_monitors)
-			if not monitors then
-				monitors = { with_observer }
-				(id_record :: any)[idr_monitors] = monitors
-			else
-				table.insert(monitors, with_observer)
-			end
+
+		local destroy_observer = self:observe_added(arch_added)
+		for _, arch in self:archetypes() do
+			arch_added(arch)
 		end
 
 		local function monitor_destroy(): ()
-			for with_index = 1, with_dense_count do
-				local id = with_dense[with_index]
-				local id_record = cindex[id]
-				if not id_record then continue end
-				local monitors = INDEX(id_record, idr_monitors)
-				if not monitors then continue end
-				local found = table.find(monitors, with_observer)
-				if not found then continue end
-				table.remove(monitors, found)
-			end
-			for without_index = 1, with_dense_count do
-				local id = without_dense[without_index]
-				local id_record = cindex[id]
-				if not id_record then continue end
-				local monitors = INDEX(id_record, idr_monitors)
-				if not monitors then continue end
-				local found = table.find(monitors, with_observer)
-				if not found then continue end
-				table.remove(monitors, found)
-			end
-		end
-
-		return monitor_destroy
-	end
-
-	function queryobj.monitor_removed_row(self: QueryIdentityInternal, callback: (U53, Arch, Row) -> ()): () -> ()
-		local match = self:match()
-		local function antimatch(arch: Arch): boolean
-			return not match(arch)
-		end
-
-		local without_observer: Monitor = {
-			match = antimatch,
-			callback = callback,
-		}
-
-		local with_dense = self._with_dense
-		local without_dense = self._without_dense
-		local with_dense_count = #with_dense
-		local without_dense_count = #without_dense
-
-		for with_index = 1, with_dense_count do
-			local id = with_dense[with_index]
-			local id_record = id_record_ensure(id)
-			local monitors = INDEX(id_record, idr_monitors)
-			if not monitors then
-				monitors = { without_observer }
-				-- Luau
-				(id_record :: any)[idr_monitors] = monitors
-			else
-				table.insert(monitors, without_observer)
-			end
-		end
-		for without_index = 1, without_dense_count do
-			local id = without_dense[without_index]
-			local id_record = id_record_ensure(id)
-			local monitors = INDEX(id_record, idr_monitors)
-			if not monitors then
-				monitors = { without_observer }
-				(id_record :: any)[idr_monitors] = monitors
-			else
-				table.insert(monitors, without_observer)
-			end
-		end
-
-		local function monitor_destroy(): ()
-			for with_index = 1, with_dense_count do
-				local id = with_dense[with_index]
-				local id_record = cindex[id]
-				if not id_record then continue end
-				local monitors = INDEX(id_record, idr_monitors)
-				if not monitors then continue end
-				local found = table.find(monitors, without_observer)
-				if not found then continue end
-				table.remove(monitors, found)
-			end
-			for without_index = 1, with_dense_count do
-				local id = without_dense[without_index]
-				local id_record = cindex[id]
-				if not id_record then continue end
-				local monitors = INDEX(id_record, idr_monitors)
-				if not monitors then continue end
-				local found = table.find(monitors, without_observer)
-				if not found then continue end
+			destroy_observer()
+			local archetypes = self:archetypes()
+			local archetypes_count = #archetypes
+			for archetypes_index = 1, archetypes_count do
+				local arch = archetypes[archetypes_index]
+				local monitors = arch.matching_monitors
+				if not monitors then
+					-- TODO: should this error?
+					continue
+				end
+				local found = binary_find(monitors, this)
 				table.remove(monitors, found)
 			end
 		end
@@ -3200,17 +3329,19 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 		local reads = self._reads
 		local reads_count = #reads
 
-		local wrapper_callback: (U53, Arch, Row) -> ()
+		local wrapper_callback: MonitorCallback
 		if reads_count == 1 then
 			local A = reads[1]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A], row)
 			end
 		elseif reads_count == 2 then
 			local A = reads[1]
 			local B = reads[2]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row])
 			end
@@ -3218,7 +3349,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local A = reads[1]
 			local B = reads[2]
 			local C = reads[3]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row], columns_map[C][row])
 			end
@@ -3227,7 +3359,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local B = reads[2]
 			local C = reads[3]
 			local D = reads[4]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row], columns_map[C][row], columns_map[D][row])
 			end
@@ -3237,7 +3370,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local C = reads[3]
 			local D = reads[4]
 			local E = reads[5]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
 					entity,
@@ -3255,7 +3389,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local D = reads[4]
 			local E = reads[5]
 			local F = reads[6]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
 					entity,
@@ -3275,7 +3410,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local E = reads[5]
 			local F = reads[6]
 			local G = reads[7]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
 					entity,
@@ -3297,7 +3433,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local F = reads[6]
 			local G = reads[7]
 			local H = reads[8]
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
 					entity,
@@ -3323,7 +3460,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			local G = reads[7]
 			local H = reads[8]
 			local rest_size = reads_count - 8
-			function wrapper_callback(entity: U53, arch: Arch, row: Row)
+			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				local rest = table.create(rest_size)
 				local rest_count = 0
@@ -3346,16 +3484,16 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			end
 		end
 
-		-- Entity has been added, so it is guaranteed to have a row.
-		return (self:monitor_added_row(wrapper_callback :: (U53, Arch, Row) -> ()))
+		return (self:monitor_rows(wrapper_callback))
 	end
 
 	function queryobj.monitor_removed(self: QueryIdentityInternal, callback: (U53) -> ()): () -> ()
-		local function wrapper_callback(entity: U53)
+		local function wrapper_callback(event: MonitorEvent, entity: U53): ()
+			if event ~= "removed" then return end
 			callback(entity)
 		end
 
-		return (self:monitor_removed_row(wrapper_callback))
+		return (self:monitor_rows(wrapper_callback))
 	end
 
 	function queryobj.archetypes_cached(self: QueryIdentityInternal): { Arch }
@@ -3436,21 +3574,31 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 	end
 
 	ecs_add(B2Name, B2Component)
-	ecs_set(B2Component, B2Name, "B2Component")
-	ecs_set(B2Name, B2Name, "B2Name")
-	ecs_set(B2Wildcard, B2Name, "B2Wildcard")
-	ecs_set(B2ChildOf, B2Name, "B2ChildOf")
-	ecs_set(B2OnClear, B2Name, "B2CleanupOnClear")
-	ecs_set(B2OnClearTarget, B2Name, "B2CleanupOnClearTarget")
-	ecs_set(B2CleanupDelete, B2Name, "B2CleanupDelete")
-	ecs_set(B2OnAdd, B2Name, "B2OnAdd")
-	ecs_set(B2OnChange, B2Name, "B2OnChange")
-	ecs_set(B2OnRemove, B2Name, "B2OnRemove")
+	ecs_add(B2Component, B2Name, "B2Component")
+	ecs_add(B2Name, B2Name, "B2Name")
+	ecs_add(B2Exclusive, B2Name, "B2Exclusive")
+	ecs_add(B2Transitive, B2Name, "B2Transitive")
+	ecs_add(B2Wildcard, B2Name, "B2Wildcard")
+	ecs_add(B2IsA, B2Name, "B2IsA")
+	ecs_add(B2ChildOf, B2Name, "B2ChildOf")
+	ecs_add(B2OnClear, B2Name, "B2OnClear")
+	ecs_add(B2OnDelete, B2Name, "B2OnDelete")
+	ecs_add(B2OnClearTarget, B2Name, "B2OnClearTarget")
+	ecs_add(B2OnDeleteTarget, B2Name, "B2OnDeleteTarget")
+	ecs_add(B2OnClearAsRelation, B2Name, "B2OnClearAsRelation")
+	ecs_add(B2OnDeleteAsRelation, B2Name, "B2OnDeleteAsRelation")
+	ecs_add(B2CleanupDelete, B2Name, "B2CleanupDelete")
+	ecs_add(B2OnAdd, B2Name, "B2OnAdd")
+	ecs_add(B2OnRemove, B2Name, "B2OnRemove")
+	ecs_add(B2OnChange, B2Name, "B2OnChange")
+
 	ecs_add(B2OnChange, B2Component)
 	ecs_add(B2OnAdd, B2Component)
 	ecs_add(B2OnRemove, B2Component)
 	ecs_add(B2ChildOf, ENT_PAIR(B2OnClearTarget, B2CleanupDelete))
 	ecs_add(B2ChildOf, B2Exclusive)
+
+	ecs_add(B2IsA, B2Transitive)
 
 	--stylua: ignore
 	return {
@@ -3493,10 +3641,13 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			eindex_sparse = eindex_sparse,
 			eindex_alive_count = function() return eindex_alive_count end,
 			eindex_id_top = function() return eindex_id_top end,
+			num_monitors = function() return num_monitors end,
+			monitor_callbacks = monitor_callbacks,
 			user_components_count = function() return user_components_count end,
 			eindex_try_any_record = eindex_try_any_record,
 			eindex_try_matching_record = eindex_try_matching_record,
 			eindex_alive_eh = eindex_alive_eh,
+			invoke_monitors_slow = invoke_monitors_slow,
 			ecs_arch_data = ecs_arch_data,
 			ecs_existed = ecs_existed,
 			ecs_contains = ecs_contains,
@@ -3517,10 +3668,12 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			ecs_parent = ecs_parent,
 			id_record_new = id_record_new,
 			id_record_ensure = id_record_ensure,
-			id_record_arch_append = id_record_arch_append,
+			id_record_insert_arch = id_record_insert_arch,
 			ids_page_mapping = ids_page_mapping,
 			pagebuff_from_mapping = pagebuff_from_mapping,
 			list_from_buff = list_from_buff,
+			arch_id_get_column = arch_id_get_column,
+			arch_insert_id_column = arch_insert_id_column,
 			arch_new = arch_new,
 			agraph_ensure = agraph_ensure,
 			agraph_ensure_arch = agraph_ensure_arch,
@@ -3528,6 +3681,7 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			binary_insert = binary_insert,
 			agraph_traverse_add = agraph_traverse_add,
 			agraph_traverse_add_ensure = agraph_traverse_add_ensure,
+			buff_remove_id = buff_remove_id,
 			agraph_traverse_rem = agraph_traverse_rem,
 			agraph_traverse_rem_ensure = agraph_traverse_rem_ensure,
 			ecs_add = ecs_add,
@@ -3546,6 +3700,8 @@ local function ecs_new(_: any, disable_auto_ensure_dense: boolean?)
 			query_matcher_new = query_matcher_new,
 			query_matcher_ensure = query_matcher_ensure,
 			ecs_each = ecs_each,
+			binary_table_insert = binary_table_insert,
+			binary_find = binary_find,
 			queryobj = queryobj,
 			queryobj_metatable = queryobj_metatable,
 			ecs_query = ecs_query,
@@ -3559,6 +3715,7 @@ export type Id<T = nil> = Ent<T>
 type Destructor = () -> ()
 
 export type Query<Reads...> = {
+	locked: (self: Query<Reads...>) -> boolean,
 	with: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
 	without: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
 	match: (self: Query<Reads...>) -> (Arch) -> boolean,
@@ -3568,8 +3725,7 @@ export type Query<Reads...> = {
 	archetypes_cached: (self: Query<Reads...>) -> { Arch },
 	observe_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
 	observe_removed: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
-	monitor_added_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> Destructor,
-	monitor_removed_row: (self: Query<Reads...>, callback: (Ent, Arch, Row) -> ()) -> Destructor,
+	monitor_rows: (self: Query<Reads...>, callback: MonitorCallback) -> Destructor,
 	monitor_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> Destructor,
 	monitor_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> Destructor,
 }
@@ -3716,15 +3872,22 @@ local function CAST_ID(value: any): Id
 	return value
 end
 
+local function ENT_INHERITS(id: U53): U53
+	return ENT_PAIR(B2IsA, id)
+end
+
 local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
 	ecs = ecs_new :: ((new_solver: true, disable_auto_ensure_dense: boolean?) -> NewSolverECS) & ((new_solver: false, disable_auto_ensure_dense: boolean?) -> OldSolverECS),
 	pair = ENT_PAIR :: (hi: Ent, lo: Ent) -> Ent,
 	pair_eh = ENT_PAIR_EH :: (id: Ent | U53) -> boolean,
 	pair_hi = ENT_PAIR_HI :: (id: Ent | U53) -> Ent,
 	pair_lo = ENT_PAIR_LO :: (id: Ent | U53) -> Ent,
+	inherits = ENT_INHERITS :: <T>(id: Id<T>) -> Id<T>,
 	Component = CAST_ID(B2Component),
 	Name = CAST_ENT(B2Name) :: Id<string>,
+	Transitive = CAST_ID(B2Transitive),
 	Wildcard = CAST_ID(B2Wildcard),
+	IsA = CAST_ID(B2IsA),
 	ChildOf = CAST_ID(B2ChildOf),
 	DeleteOnClear = CAST_ID(ENT_PAIR(B2OnClear, B2CleanupDelete)),
 	DeleteOnDelete = CAST_ID(ENT_PAIR(B2OnDelete, B2CleanupDelete)),
@@ -3753,13 +3916,14 @@ local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
 		idr_dense_cached = idr_dense_cached,
 		idr_dense_column = idr_dense_column,
 		idr_dense_counts = idr_dense_counts,
-		idr_monitors = idr_monitors,
 
 		INDEX = INDEX,
+		NOOP = NOOP,
 		NULL_ARRAY = NULL_ARRAY,
 		NULLPTR = NULLPTR,
 		F64_BYTES = F64_BYTES,
 		IDFLAG_TAG = IDFLAG_TAG,
+		IDFLAG_TRANSITIVE = IDFLAG_TRANSITIVE,
 		IDFLAG_DELETE_ONCLEAR = IDFLAG_DELETE_ONCLEAR,
 		IDFLAG_DELETE_ONDELETE = IDFLAG_DELETE_ONDELETE,
 		IDFLAG_DELETE_ONCLEARTARGET = IDFLAG_DELETE_ONCLEARTARGET,
@@ -3781,7 +3945,9 @@ local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
 		B2Component = B2Component,
 		B2Name = B2Name,
 		B2Exclusive = B2Exclusive,
+		B2Transitive = B2Transitive,
 		B2Wildcard = B2Wildcard,
+		B2IsA = B2IsA,
 		B2ChildOf = B2ChildOf,
 		B2OnClear = B2OnClear,
 		B2OnDelete = B2OnDelete,
@@ -3814,15 +3980,24 @@ export type B2 = typeof(b2264644_3d77_4ab9_8a00_5e9ffb0ff964)
 --[[
 internal type exports
 ]]
+export type _U53 = U53
+export type _U32 = U32
+export type _U26 = U26
+export type _U24 = U24
+export type _Ptr = Ptr
+export type _Set<Key, Value = true> = Set<Key, Value>
+export type _Sorted<Tbl> = Tbl
+export type _Bitset = Bitset
 export type _IdList = IdList
-export type _ObservableEventId = ObservableEventId
 export type _ArchLocation = ArchLocation
 export type _ArchHash = ArchHash
 export type _Row = Row
+export type _PageRecord = PageRecord
 export type _Column = Column
 export type _Arch = Arch
 export type _ArchGraphNode = ArchGraphNode
 export type _Hooks = Hooks
+export type _EntRecord = EntRecord
 export type _IdRecord = IdRecord
 export type _InternalOnAddHook = InternalOnAddHook
 export type _InternalOnChangeHook = InternalOnChangeHook
@@ -3831,6 +4006,9 @@ export type _QueryMatcher = QueryMatcher
 export type _QueryInner = QueryInner
 export type _QueryOuter = QueryOuter
 export type _Observer<Parameters... = ...any> = Observer<Parameters...>
-export type _EntRecord = EntRecord
+export type _MonitorId = MonitorId
+export type _MonitorEvent = MonitorEvent
+export type _MonitorCallback = MonitorCallback
+export type _Destructor = Destructor
 
 return b2264644_3d77_4ab9_8a00_5e9ffb0ff964

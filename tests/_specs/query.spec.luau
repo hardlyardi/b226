@@ -782,4 +782,22 @@ TEST("deleting monitors removed", function(interface)
 	interface:expect_equal(removed_count, 1)
 end)
 
+TEST("adding pair monitors added for pair(rel, wildcard)", function(interface)
+	local added_count = 0
+	ecs.query(pair(e2, Wildcard)):monitor_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	interface:expect_equal(added_count, 1)
+end)
+
+TEST("adding pair monitors added for pair(Wildcard, targ)", function(interface)
+	local added_count = 0
+	ecs.query(pair(Wildcard, e3)):monitor_added(function()
+		added_count += 1
+	end)
+	ecs.add(e1, pair(e2, e3))
+	interface:expect_equal(added_count, 1)
+end)
+
 return DONE()
