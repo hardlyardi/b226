@@ -304,9 +304,11 @@ for components_count = 1, 9 do
 
 		local query = ecs.query(table.unpack(cts))
 
-		local count: number
-		for arch, row_count in query:outer() do
-			count = row_count
+		local count = 0
+		for arch, inner in query:outer() do
+			for _ in inner do
+				count += 1
+			end
 		end
 		interface:expect_equal(count, 2)
 	end)
