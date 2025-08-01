@@ -17,4 +17,6 @@ TEST("repro 1", function(interface)
 	ecs.clear(e1, true)
 end)
 
+TEST("repro 2", function(interface) end)
+
 return DONE()

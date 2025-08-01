@@ -31,6 +31,7 @@ local dummy2 = ecs.entity()
 ecs.add(Exclusive, b2.Exclusive)
 ecs.add(exclusive, b2.Exclusive)
 
+--[[
 PREFIX("transitive relation")
 
 TEST("successive mapping", function(interface)
@@ -143,6 +144,7 @@ TEST("removing successive traverses downward", function(interface)
 	interface:expect_falsy(ecs.has(bob, pair(Inside, seattle)))
 	interface:expect_falsy(ecs.has(bob, pair(Inside, capitol_hil)))
 end)
+]]
 
 PREFIX("entity relation")
 
@@ -159,8 +161,8 @@ end)
 TEST("targeting index", function(interface)
 	ecs.add(e1, pair(relation, dummy))
 	ecs.add(e1, pair(relation, dummy2))
-	interface:expect_equal(ecs.target(e1, relation, 0), dummy)
-	interface:expect_equal(ecs.target(e1, relation, 1), dummy2)
+	interface:expect_equal(ecs.target(e1, relation, 1), dummy)
+	interface:expect_equal(ecs.target(e1, relation, 0), dummy2)
 end)
 
 TEST("targeting outside range", function(interface)
@@ -291,9 +293,9 @@ end)
 
 TEST("loop until no target", function(interface)
 	local targets = {}
-	for i = 1, 10 do
+	for i = 0, 9 do
 		local target = ecs.entity()
-		targets[i] = target
+		targets[10 - i] = target
 		ecs.add(e1, pair(relation, target))
 	end
 
