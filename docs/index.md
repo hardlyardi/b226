@@ -21,7 +21,7 @@ features:
   - title: Entity Relationships
     details:
         Entity relationships make it easy and lightning ⚡ fast to describe links 🔗 between entities. Exclusive
-        relationships 💑 allow you to represent hierarchies directly in the ECS.
+        relationships 💑 allow you to represent graphs directly in the ECS.
   - title: Fast Querying
     details:
         Queries are blazingly 🔥 fast and have caching, optimized 🤖 around querying many components at a time
