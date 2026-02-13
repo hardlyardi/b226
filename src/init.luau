@@ -3997,23 +3997,7 @@ export type query_watcher = {
 	destroy: destructor,
 }
 
-export type query<Reads...> = {
-	locked: (self: query<Reads...>) -> boolean,
-	with: (self: query<Reads...>, ...ent) -> query<Reads...>,
-	without: (self: query<Reads...>, ...ent) -> query<Reads...>,
-	match: (self: query<Reads...>) -> (arch) -> boolean,
-	archetypes: (self: query<Reads...>) -> { arch },
-	outer: (self: query<Reads...>, cached: true?) -> () -> (arch, () -> (row, ent, Reads...)),
-	entities: (self: query<Reads...>, cached: true?) -> () -> (ent, Reads...),
-	archetypes_cached: (self: query<Reads...>) -> { arch },
-	report_added: (self: query<Reads...>, callback: (arch) -> ()) -> destructor,
-	report_removed: (self: query<Reads...>, callback: (arch) -> ()) -> destructor,
-	watch_rows: (self: query<Reads...>, callback: watcher_callback) -> query_watcher,
-	watch_added: (self: query<Reads...>, callback: (ent, Reads...) -> ()) -> query_watcher,
-	watch_removed: (self: query<Reads...>, callback: (ent) -> ()) -> query_watcher,
-}
-
-export type old_solver_ecs = {
+export type ecs = {
 	arch_data: ((archetype: arch) -> { ent | false })
 		& (<A>(archetype: arch, a: ent<A>) -> ({ ent | false }, { A }))
 		& (<A, B>(archetype: arch, a: ent<A>, b: ent<B>) -> ({ ent | false }, { A }, { B }))
@@ -4114,6 +4098,22 @@ export type old_solver_ecs = {
 -- 	return Type
 -- end
 
+export type query_extracted<Reads...> = {
+	with: (self: query_extracted<Reads...>, ...ent) -> query_extracted<Reads...>,
+	without: (self: query_extracted<Reads...>, ...ent) -> query_extracted<Reads...>,
+	match: (self: query_extracted<Reads...>) -> (arch) -> boolean,
+	archetypes: (self: query_extracted<Reads...>) -> { arch },
+	entities: (self: query_extracted<Reads...>) -> () -> (ent, Reads...),
+	archetypes_cached: (self: query_extracted<Reads...>) -> { arch },
+	entities_cached: (self: query_extracted<Reads...>) -> () -> (ent, Reads...),
+	observe_added: (self: query_extracted<Reads...>, callback: (arch) -> ()) -> (),
+	observe_removed: (self: query_extracted<Reads...>, callback: (arch) -> ()) -> (),
+	monitor_added_row: (self: query_extracted<Reads...>, callback: (ent, arch, row) -> ()) -> (),
+	monitor_removed_row: (self: query_extracted<Reads...>, callback: (ent, arch, row) -> ()) -> (),
+	monitor_added: (self: query_extracted<Reads...>, callback: (ent, Reads...) -> ()) -> (),
+	monitor_removed: (self: query_extracted<Reads...>, callback: (ent) -> ()) -> (),
+}
+
 type function _query(pack: type): type
 	local b2_id = types.singleton("_B2")
 	local params = pack:parameters()
@@ -4135,14 +4135,12 @@ type function _query(pack: type): type
 			end
 			id_types[head_index] = prop
 		end
-		return (Query(table.unpack(id_types)))
+		return (query(table.unpack(id_types)))
 	end
-	return Query()
+	return query()
 end
 
-export type query_fun<Ids...> = _query<(Ids...) -> ()>
-
-export type new_solver_ecs = old_solver_ecs
+export type query<Ids...> = _query<(Ids...) -> ()>
 
 export type onadd_hook = <Data>(entity: ent, id: ent<Data>, data: Data) -> ()
 export type onchange_hook = <Data>(entity: ent, id: ent<Data>, data: Data) -> ()
@@ -4156,7 +4154,7 @@ local function CAST_ID(value: any): id
 end
 
 local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
-	ecs = ecs_new :: ((new_solver: true, disable_auto_ensure_dense: boolean?) -> new_solver_ecs) & ((new_solver: false, disable_auto_ensure_dense: boolean?) -> old_solver_ecs),
+	ecs = ecs_new :: (disable_auto_ensure_dense: boolean?) -> (ecs),
 	pair = ENT_PAIR :: (hi: ent, lo: ent) -> ent,
 	pair_eh = ENT_PAIR_EH :: (id: ent | u53) -> boolean,
 	pair_hi = ENT_PAIR_HI :: (id: ent | u53) -> ent,
