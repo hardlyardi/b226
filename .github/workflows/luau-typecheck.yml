@@ -1,0 +1,47 @@
+# Adapted from https://github.com/ffrostfall/crunchyroll/blob/52dcd37a0db3ab68e84c61e446f86a9e6bd670e4/.github/workflows/analyze.yml
+name: Analyze Luau
+
+permissions:
+  actions: write
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  push:
+    paths:
+      - **/*.luau
+  pull_request:
+  workflow_dispatch:
+  merge_group:
+
+jobs:
+  analysis:
+    name: Analyze Luau
+    runs-on: ubuntu-latest
+
+    # if the head commit message contains 'skip ci', skip ci.
+    if: ${{ !contains(github.event.head_commit.message, 'skip ci') }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          repository: hardlyardi/b226
+
+      - name: setup rokit
+        uses: CompeyDev/setup-rokit@v0.1.0
+
+      - name: lune setup
+        run: lune setup
+
+      - name: run luau-lsp analysis
+        run: lune run typecheck
+    
+      - name: Upload Artifact
+        if: ${{ always() && github.repository == 'hardlyardi/b226' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: typechecking
+          path: ./

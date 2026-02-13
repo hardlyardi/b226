@@ -1,0 +1,41 @@
+name: Style
+
+permissions:
+  actions: write
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  styling:
+    name: styling
+    runs-on: ubuntu-latest
+
+    # if the head commit message contains 'skip ci', skip ci.
+    if: ${{ !contains(github.event.head_commit.message, 'skip ci') }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ffrostfall/crunchyroll
+
+      - name: setup rokit
+        uses: CompeyDev/setup-rokit@v0.1.0
+
+      - name: run styling
+        run: lune run styling | Out-File -FilePath ./styling-output.txt
+
+      - name: Upload Artifact
+        if: ${{ always() && github.repository == 'hardlyardi/b226' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stylua-artifact
+          path: ./styling-output.txt
