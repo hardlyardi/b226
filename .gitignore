@@ -1,8 +1,12 @@
 # Rojo Sourcemap
 /sourcemap.json
 
-# Test Suite
-_SUITE/**
+# Suite
+_TESTSUITE/**
+_BENCHSUITE/**
+
+# Vscode settings
+.vscode/**
 
 # Place files
 **.rbxl*
