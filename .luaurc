@@ -1,11 +1,12 @@
 {
     "languageMode": "strict",
     "aliases": {
-        "lune": "~/.lune/.typedefs/0.9.0/",
-        "b2": "./src/",
-        "test": "./tests/",
-        "specs": "./tests/_specs/",
-        "benches": "./tests/_benchmarks/",
-        "runtest": "./tests/runtest/"
+        "lune": "~/.lune/.typedefs/0.9.0",
+        "b2": "./src",
+        "b2old": "./src_old",
+        "test": "./tests",
+        "specs": "./tests/.specs",
+        "benches": "./tests/_benchmarks",
+        "runtest": "./tests/runtest"
     }
 }
