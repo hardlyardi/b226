@@ -19,30 +19,30 @@ library as the "low" portion of an entity ID.
 - Sorted<Values>:
 	Denotes an object will always have sorted values no matter what.
 ]]
-type U53 = number
-type U32 = number
-type U26 = number
-type U24 = number
-type Ptr = number
-type Set<Key, Value = true> = { [Key]: Value }
-type Sorted<Tbl> = Tbl
+type u53 = number
+type u32 = number
+type u26 = number
+type u24 = number
+type ptr = number
+type set<Key, Value = true> = { [Key]: Value }
+type sorted<Tbl> = Tbl
 
 -- A set of bits.
-type Bitset = U32
+type bitset32 = u32
 -- List of entity IDs. Components are entities as well.
-type IdList = { U53 }
+type id_list = { u53 }
 
-type ArchLocation = U26
-type ArchHash = string
-type Row = U26
-type PageRecord = Bitset
-type Column = { [Row]: any }
-type Arch = {
-	location: ArchLocation,
-	graph: ArchGraphNode,
+type arch_location = u26
+type arch_hash = string
+type row = u26
+type page_record = bitset32
+type column = { [row]: any }
+type arch = {
+	location: arch_location,
+	graph: arch_graph_node,
 	-- sorted set of watcher Ids which match this archetype
-	watchers: Sorted<{ U53 }> | false,
-	ids: IdList,
+	watchers: sorted<{ u53 }> | false,
+	ids: id_list,
 
 	--[[B2 Archetypes use of Bitsets
 	A bitset is a list of single-bit flags. Archetypes in B2 are queried for components via bitsets, where every
@@ -55,17 +55,17 @@ type Arch = {
 	well, the paged bitset is limited to 32*32 bits, i.e., 1024 components. Component columns outside of this range are
 	not stored as any part of this bitset.
 	]]
-	pages_record: PageRecord,
+	pages_record: page_record,
 	bitset_pages: buffer,
 
 	-- list of rows which are 'empty', - I.e., their value is false, they have been removed, and are waiting to be
 	-- removed completely.
-	empty_rows: { Row },
+	empty_rows: { row },
 	-- entities
-	ents: { [Row]: U53 | false },
+	ents: { [row]: u53 | false },
 	-- map of IDs to columns, multiple Ids can map to one column.
-	columns_map: Set<U53, Column>,
-	columns: { Column },
+	columns_map: set<u53, column>,
+	columns: { column },
 }
 
 --[[Archetype Graph
@@ -76,55 +76,55 @@ node attempts to traverse removal, and indexing with an ID that is not present i
 - arch:
 	An optional arch. A graph node may exist without having an archetype associated with it.
 ]]
-type ArchGraphNode = {
-	[U53]: ArchGraphNode,
+type arch_graph_node = {
+	[u53]: arch_graph_node,
 	ids: buffer,
-	arch: Arch?,
+	arch: arch?,
 }
 
 --[[
-For performance purposes, the keys here are actually numbers. Hooks["_*"] in the type maps to Hooks[internal.hks_*].
+For performance purposes, the keys here are actually numbers. hooks["_*"] in the type maps to hooks[internal.hks_*].
 ]]
-type Hooks = {
-	_on_add: InternalOnAddHook?,
-	_on_change: InternalOnChangeHook?,
-	_on_remove: InternalOnRemoveHook?,
+type hooks = {
+	_on_add: internal_onadd_hook?,
+	_on_change: internal_onchange_hook?,
+	_on_remove: internal_onremove_hook?,
 }
 local hks_add: "_on_add" = 1 :: any
 local hks_change: "_on_change" = 2 :: any
 local hks_remove: "_on_remove" = 3 :: any
 
-type EntRecord = {
-	arch: Arch,
+type ent_record = {
+	arch: arch,
 	-- A lack of row signifies the entity is currently 'empty' - i.e., newly created with no data.
-	row: Row?,
-	dense: U26,
-	hooks: Hooks?,
+	row: row?,
+	dense: u26,
+	hooks: hooks?,
 	-- data can still be read from the entity, but the entity is in the process of being deleted.
 	deleting: true?,
 }
 
---[[ IdRecord
+--[[ id_record
 Stores all of the critical information relating to a component and archetypes it is a part of. For performance
-purposes, the keys here are actually numbers. IdRecord["_*"] in the type maps to IdRecord[internal.idr_*].
+purposes, the keys here are actually numbers. id_record["_*"] in the type maps to id_record[internal.idr_*].
 ]]
-type IdRecord = {
+type id_record = {
 	-- Bitflags describing various pieces of metadata about a component
-	_flags: Bitset,
+	_flags: bitset32,
 
 	-- hooks table for this entity, taken from an EntRecord
-	_hooks: Hooks,
+	_hooks: hooks,
 
 	-- sparse mapping from an archetype object to a dense index
-	_arch_sparse: Set<Arch, U26>,
+	_arch_sparse: set<arch, u26>,
 	-- number of dense indices where each index represents an archetype
 	_arch_count: number,
 	-- dense array of cached archetypes
-	_dense_cached: { [U26]: Arch },
+	_dense_cached: { [u26]: arch },
 	-- location of the forthmost column for this id
-	_dense_column: { [U26]: U26 },
+	_dense_column: { [u26]: u26 },
 	-- (column - offset) = first target column of a relation, only applies to pair ids with a wildcard object.
-	_dense_offset: { [U26]: number },
+	_dense_offset: { [u26]: number },
 }
 local idr_flags: "_flags" = 1 :: any
 local idr_hooks: "_hooks" = 2 :: any
@@ -134,9 +134,9 @@ local idr_dense_cached: "_dense_cached" = 5 :: any
 local idr_dense_column: "_dense_column" = 6 :: any
 local idr_dense_offset: "_dense_offset" = 7 :: any
 
-type InternalOnAddHook = (entity: U53, id: U53, data: any?) -> ()
-type InternalOnChangeHook = (entity: U53, id: U53, data: any) -> ()
-type InternalOnRemoveHook = (entity: U53, id: U53) -> ()
+type internal_onadd_hook = (entity: u53, id: u53, data: any?) -> ()
+type internal_onchange_hook = (entity: u53, id: u53, data: any) -> ()
+type internal_onremove_hook = (entity: u53, id: u53) -> ()
 
 -- Queries assemble up to 5 filters:
 -- - One bitset to check that the archetype's pages_record contains all of the **included** bitset pages of the query.
@@ -153,20 +153,20 @@ type InternalOnRemoveHook = (entity: U53, id: U53) -> ()
 -- This matcher function is cached in the query object, and is also cached globally based on an ordered hash of the
 -- filter components, and, furthermore, if the query is exclusively "fast" - i.e., only checks bitset pages, it will be
 -- cached based on the bitset of included and excluded values as a binary string.
-type QueryMatcher = (Arch) -> boolean
-type QueryInner = () -> (U53, ...any)
-type QueryOuter = (QueryMatcher) -> ({ Arch }, { number })
+type query_matcher = (arch) -> boolean
+type query_inner = () -> (u53, ...any)
+type query_outer = (query_matcher) -> ({ arch }, { number })
 
-type Reporter<Parameters... = ...any> = {
+type reporter<Parameters... = ...any> = {
 	callback: (Parameters...) -> (),
-	match: QueryMatcher | false,
+	match: query_matcher | false,
 }
 
-type WatcherEvent = "added" | "removed"
-type WatcherCallback = (WatcherEvent, U53, src: Arch, dst: Arch, Row) -> ()
+type watcher_event = "added" | "removed"
+type watcher_callback = (watcher_event, u53, src: arch, dst: arch, row) -> ()
 
-local function INDEX<Indexable, Index>(indexable: Indexable, index: Index): index<Indexable, Index>
-	return (indexable :: any)[index]
+local function INDEX<indexable, key>(indexable: indexable, key: key): index<indexable, key>
+	return (indexable :: any)[key]
 end
 
 local function NOOP(): ...any end
@@ -216,7 +216,7 @@ local B2OnRemove           = MAX_COMPONENT + 16
 local B2OnChange           = MAX_COMPONENT + 17
 --stylua: ignore end
 
-local function ASSERT<Condition>(condition: Condition, msg: string?): typeof(assert(... :: Condition))
+local function ASSERT<condition>(condition: condition, msg: string?): typeof(assert(... :: condition))
 	if condition then return condition end
 	error(msg, 2)
 end
@@ -226,42 +226,42 @@ local function ORDERED_HASH(tbl: { any })
 	return hashed
 end
 
-local function ENT_LO(entity: U53): U24
+local function ENT_LO(entity: u53): u24
 	return entity % EMASK_LO
 end
 
 -- unused for now, left as a user-facing internal API
-local function ENT_HI(entity: U53): number
+local function ENT_HI(entity: u53): number
 	return entity // EMASK_LO
 end
 
-local function ENT_PAIR(hi: U53, lo: U53): U53
+local function ENT_PAIR(hi: u53, lo: u53): u53
 	hi %= EMASK_LO
 	hi *= EMASK_LO
 	lo %= EMASK_LO
 	return hi + lo + EPAIR_OFFSET
 end
 
-local function ENT_PAIR_EH(ent: U53): boolean
+local function ENT_PAIR_EH(ent: u53): boolean
 	return ent > EPAIR_OFFSET
 end
 
-local function ENT_PAIR_HI(pair: U53): U24
+local function ENT_PAIR_HI(pair: u53): u24
 	return (pair - EPAIR_OFFSET) // EMASK_LO
 end
 
-local function ENT_PAIR_LO(pair: U53): U24
+local function ENT_PAIR_LO(pair: u53): u24
 	return (pair - EPAIR_OFFSET) % EMASK_LO
 end
 
-local function ARCH_APPEND(entity: U53, arch: Arch): number
+local function ARCH_APPEND(entity: u53, arch: arch): number
 	local ents = arch.ents
 	local ents_top = #ents + 1
 	ents[ents_top] = entity
 	return ents_top
 end
 
-local function ENT_INCREMENT_GENERATION(entity: U53): U53
+local function ENT_INCREMENT_GENERATION(entity: u53): u53
 	if entity > EMASK_LO then
 		local id = entity % EMASK_LO
 		local generation = entity // EMASK_LO
@@ -274,7 +274,7 @@ local function ENT_INCREMENT_GENERATION(entity: U53): U53
 	return entity + EMASK_LO
 end
 
-local function RECORD_ENSURE_ROW(record: EntRecord, record_arch: Arch, entity: U53): Row
+local function RECORD_ENSURE_ROW(record: ent_record, record_arch: arch, entity: u53): row
 	local row = record.row
 	if row then return row end
 	row = ARCH_APPEND(entity, record_arch)
@@ -283,25 +283,25 @@ local function RECORD_ENSURE_ROW(record: EntRecord, record_arch: Arch, entity: U
 end
 
 local function ecs_new(_: any)
-	local ROOT_ARCHETYPE: Arch
-	local agraph_root: ArchGraphNode = { ids = NULLPTR }
-	local agraph: Set<ArchHash, ArchGraphNode> = { [""] = agraph_root }
-	local arch_has_empty_rows: { [Arch]: true } = {}
-	local arch_scheduled_for_deletion: { [Arch]: true } = {}
-	local archetypes: { [ArchLocation]: Arch } = {}
+	local ROOT_ARCHETYPE: arch
+	local agraph_root: arch_graph_node = { ids = NULLPTR }
+	local agraph: set<arch_hash, arch_graph_node> = { [""] = agraph_root }
+	local arch_has_empty_rows: { [arch]: true } = {}
+	local arch_scheduled_for_deletion: { [arch]: true } = {}
+	local archetypes: { [arch_location]: arch } = {}
 	local archetypes_count = 0
 
-	local cindex: Set<U53, IdRecord> = {}
+	local cindex: set<u53, id_record> = {}
 
-	local eindex_dense: Set<U26, U53> = {}
-	local eindex_sparse: Set<U26, EntRecord> = {}
+	local eindex_dense: set<u26, u53> = {}
+	local eindex_sparse: set<u26, ent_record> = {}
 	local eindex_alive_count: number = 0
 	local eindex_id_top: number = 0
 
-	local report_arch_added: Set<U53, { Reporter }> = {}
-	local report_arch_removed: Set<U53, { Reporter }> = {}
+	local report_arch_added: set<u53, { reporter }> = {}
+	local report_arch_removed: set<u53, { reporter }> = {}
 
-	local watcher_callbacks: Set<U53, WatcherCallback> = {}
+	local watcher_callbacks: set<u53, watcher_callback> = {}
 
 	local user_components_count: number = 0
 
@@ -309,7 +309,7 @@ local function ecs_new(_: any)
 	Gets a record for an entity if one exists. Runs no safety checks, so, it may retrieve a record from a dead entity or
 	from an entirely different generation.
 	]=]
-	local function eindex_try_any_record(entity: U53): EntRecord?
+	local function eindex_try_any_record(entity: u53): ent_record?
 		return eindex_sparse[ENT_LO(entity)]
 	end
 
@@ -318,7 +318,7 @@ local function ecs_new(_: any)
 	but, will not check if the entity is alive. If a generation is incremented manually or a rogue number happens to
 	match the entity low portion and full ID including generation.
 	]]
-	local function eindex_try_matching_record(entity: U53): EntRecord?
+	local function eindex_try_matching_record(entity: u53): ent_record?
 		local record = eindex_try_any_record(entity)
 		if record and eindex_dense[record.dense] ~= entity then return nil end
 		return record
@@ -338,7 +338,7 @@ local function ecs_new(_: any)
 	-- 	return record
 	-- end
 
-	local function eindex_alive_eh(entity: U53): boolean
+	local function eindex_alive_eh(entity: u53): boolean
 		local record = eindex_try_any_record(entity)
 		if record then
 			local record_dense = record.dense
@@ -347,7 +347,7 @@ local function ecs_new(_: any)
 		return false
 	end
 
-	local function invoke_watchers_slow(entity: U53, src: Arch, dst: Arch, row: Row): ()
+	local function invoke_watchers_slow(entity: u53, src: arch, dst: arch, row: row): ()
 		local src_list = src.watchers
 		local dst_list = dst.watchers
 		if src_list then
@@ -403,13 +403,13 @@ local function ecs_new(_: any)
 	end
 
 	local function ecs_arch_data(
-		archetype: Arch,
-		A: U53?,
-		B: U53?,
-		C: U53?,
-		D: U53?,
-		...: U53
-	): ({ U53 | false }, ...Column)
+		archetype: arch,
+		A: u53?,
+		B: u53?,
+		C: u53?,
+		D: u53?,
+		...: u53
+	): ({ u53 | false }, ...column)
 		local columns_map = archetype.columns_map
 		local entities = archetype.ents
 
@@ -441,18 +441,18 @@ local function ecs_new(_: any)
 		return entities
 	end
 
-	local function ecs_existed(entity: U53): boolean
+	local function ecs_existed(entity: u53): boolean
 		return eindex_try_any_record(entity) ~= nil
 	end
 
-	local function ecs_contains(entity: U53): boolean
+	local function ecs_contains(entity: u53): boolean
 		return eindex_alive_eh(entity)
 	end
 
 	--[=[
 	Gets the latest alive generation of an entity if one exists.
 	]=]
-	local function ent_try_latest_alive(entity: U53): U53?
+	local function ent_try_latest_alive(entity: u53): u53?
 		local record = eindex_try_any_record(entity)
 		if record then
 			return eindex_dense[record.dense] --
@@ -474,7 +474,7 @@ local function ecs_new(_: any)
 	-- 	return nil
 	-- end
 
-	local function eindex_new_id_alive(): U53
+	local function eindex_new_id_alive(): u53
 		if eindex_alive_count < eindex_id_top then
 			eindex_alive_count += 1
 			return eindex_dense[eindex_alive_count]
@@ -493,23 +493,23 @@ local function ecs_new(_: any)
 		return id
 	end
 
-	local function ecs_entity(): U53
+	local function ecs_entity(): u53
 		return (eindex_new_id_alive())
 	end
 
-	local function ecs_ids_of(entity: U53): { U53 }
+	local function ecs_ids_of(entity: u53): { u53 }
 		local record = eindex_try_matching_record(entity)
 		if not record then return {} end
 		return table.clone(record.arch.ids)
 	end
 
-	local function ecs_in_use(entity: U53): boolean
+	local function ecs_in_use(entity: u53): boolean
 		local record = eindex_try_matching_record(entity)
 		if record then return not not record.hooks end
 		return false
 	end
 
-	local function arch_ensure_dense(arch: Arch): ()
+	local function arch_ensure_dense(arch: arch): ()
 		local empty_rows = arch.empty_rows
 		local empty_rows_count = #empty_rows
 		if empty_rows_count == 0 then return end
@@ -564,7 +564,7 @@ local function ecs_new(_: any)
 	--[=[
 	src_row should always be an occupied row in the src archetype
 	]=]
-	local function arch_move(src: Arch, src_entity: U53, src_row: Row, dst: Arch, dst_row: Row): ()
+	local function arch_move(src: arch, src_entity: u53, src_row: row, dst: arch, dst_row: row): ()
 		local src_columns_map = src.columns_map
 		local src_columns = src.columns
 		local dst_ids = dst.ids
@@ -593,25 +593,25 @@ local function ecs_new(_: any)
 		end
 
 		-- src entity should always be occupied when moved
-		local moved_record = eindex_sparse[ENT_LO(src_entity :: U53)]
+		local moved_record = eindex_sparse[ENT_LO(src_entity :: u53)]
 		moved_record.row = dst_row
 		moved_record.arch = dst
 	end
 
-	local function ent_move(entity: U53, record: EntRecord, src: Arch, dst: Arch): Row
+	local function ent_move(entity: u53, record: ent_record, src: arch, dst: arch): row
 		local src_row = RECORD_ENSURE_ROW(record, src, entity)
 		local dst_row = ARCH_APPEND(entity, dst)
 		arch_move(src, entity, src_row, dst, dst_row)
 		return dst_row
 	end
 
-	local function fetch_at_row(columns_map: index<Arch, "columns_map">, id: U53, row: Row): any?
+	local function fetch_at_row(columns_map: index<arch, "columns_map">, id: u53, row: row): any?
 		local column = columns_map[id]
 		if column then return column[row] end
 		return column
 	end
 
-	local function ecs_get(entity: U53, A: U53, B: U53?, C: U53?, D: U53?, ...: U53): ...any
+	local function ecs_get(entity: u53, A: u53, B: u53?, C: u53?, D: u53?, ...: u53): ...any
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
@@ -648,7 +648,7 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ecs_bulk_get(entity: U53, ids: { U53 }): { any }?
+	local function ecs_bulk_get(entity: u53, ids: { u53 }): { any }?
 		local record = eindex_try_matching_record(entity)
 		if not record then return nil end
 
@@ -666,7 +666,7 @@ local function ecs_new(_: any)
 		return data
 	end
 
-	local function ecs_has(entity: U53, A: U53, B: U53?, C: U53?, D: U53?, ...: U53): boolean
+	local function ecs_has(entity: u53, A: u53, B: u53?, C: u53?, D: u53?, ...: u53): boolean
 		local record = eindex_try_matching_record(entity)
 		if not record then return false end
 
@@ -719,7 +719,7 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ent_has_inline(entity: U53, id: U53): boolean
+	local function ent_has_inline(entity: u53, id: u53): boolean
 		local record = eindex_try_matching_record(entity)
 		if not record then return false end
 
@@ -730,7 +730,7 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ecs_target(entity: U53, relation: U24, index: number?): U24?
+	local function ecs_target(entity: u53, relation: u24, index: number?): u24?
 		local record = eindex_try_matching_record(entity)
 		if not record then return nil end
 
@@ -762,7 +762,7 @@ local function ecs_new(_: any)
 		return alive_target
 	end
 
-	local function ecs_parent(entity: U53): U24?
+	local function ecs_parent(entity: u53): u24?
 		local record = eindex_try_matching_record(entity)
 		if not record then return nil end
 
@@ -785,14 +785,14 @@ local function ecs_new(_: any)
 		return alive_target
 	end
 
-	local function id_record_new(id: U53): IdRecord
+	local function id_record_new(id: u53): id_record
 		local flags = 0
 
 		local relation = id
 		local component_eh: boolean?
 		if ENT_PAIR_EH(id) then
 			-- Luau
-			relation = ent_try_latest_alive(ENT_PAIR_HI(id)) :: U53
+			relation = ent_try_latest_alive(ENT_PAIR_HI(id)) :: u53
 			local target = ent_try_latest_alive(ENT_PAIR_LO(id))
 			ASSERT(relation and target, "Internal Error")
 
@@ -833,9 +833,9 @@ local function ecs_new(_: any)
 			flags += IDFLAG_TAG
 		end
 
-		local record = eindex_try_any_record(relation) :: EntRecord
-		local hooks: Hooks = record.hooks :: Hooks
-		local on_add: InternalOnAddHook?, on_change: InternalOnChangeHook?, on_remove: InternalOnRemoveHook?
+		local record = eindex_try_any_record(relation) :: ent_record
+		local hooks: hooks = record.hooks :: hooks
+		local on_add: internal_onadd_hook?, on_change: internal_onchange_hook?, on_remove: internal_onremove_hook?
 		if not hooks then
 			on_add, on_change, on_remove = ecs_get(relation, B2OnAdd, B2OnChange, B2OnRemove)
 			if on_add or on_change or on_remove then
@@ -846,7 +846,7 @@ local function ecs_new(_: any)
 					-- Luau
 				} :: any
 			else
-				hooks = NULL_ARRAY :: Hooks
+				hooks = NULL_ARRAY :: hooks
 			end
 			record.hooks = hooks
 		else
@@ -872,14 +872,14 @@ local function ecs_new(_: any)
 			[idr_dense_cached] = {},
 			[idr_dense_column] = {},
 			[idr_dense_offset] = {},
-		} :: IdRecord
+		} :: id_record
 
 		cindex[id] = id_record
 
 		return id_record
 	end
 
-	local function id_record_ensure(id: U53): IdRecord
+	local function id_record_ensure(id: u53): id_record
 		do
 			local id_record = cindex[id]
 			if id_record then return id_record end
@@ -888,7 +888,7 @@ local function ecs_new(_: any)
 		return (id_record_new(id))
 	end
 
-	local function id_record_insert_arch(id_record: IdRecord, arch: Arch, column_index: number): ()
+	local function id_record_insert_arch(id_record: id_record, arch: arch, column_index: number): ()
 		local id_record_arch_sparse = INDEX(id_record, idr_arch_sparse)
 		local id_record_dense_offset = INDEX(id_record, idr_dense_offset)
 		local id_record_dense_column = INDEX(id_record, idr_dense_column)
@@ -915,12 +915,12 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ids_page_mapping(ids: Sorted<IdList>): (IdList, Sorted<{ Ptr }>, { Bitset }, number)
-		local unpaged: { U53 } = {}
+	local function ids_page_mapping(ids: sorted<id_list>): (id_list, sorted<{ ptr }>, { bitset32 }, number)
+		local unpaged: { u53 } = {}
 		local unpaged_count = 0
 		local pages_record = 0
-		local pages_ptrs: { Ptr } = {}
-		local pages: { Bitset } = {}
+		local pages_ptrs: { ptr } = {}
+		local pages: { bitset32 } = {}
 		local pages_count = 0
 
 		local ids_count = #ids
@@ -962,7 +962,7 @@ local function ecs_new(_: any)
 		return unpaged, pages_ptrs, pages, pages_record
 	end
 
-	local function pagebuff_from_mapping(pages_ptrs: Sorted<{ Ptr }>, pages_bitsets: { Bitset }): buffer
+	local function pagebuff_from_mapping(pages_ptrs: sorted<{ ptr }>, pages_bitsets: { bitset32 }): buffer
 		local buff = buffer.create(MAX_PAGED_COMPONENT)
 		for pages_index = 1, #pages_ptrs do
 			local page_ptr = pages_ptrs[pages_index]
@@ -972,9 +972,9 @@ local function ecs_new(_: any)
 		return buff
 	end
 
-	local function list_from_buff(id_buffer: buffer): { U53 }
+	local function list_from_buff(id_buffer: buffer): { u53 }
 		local buff_len = buffer.len(id_buffer)
-		local list = table.create(buff_len / F64_BYTES) :: { U53 }
+		local list = table.create(buff_len / F64_BYTES) :: { u53 }
 		local list_count = 0
 		for ptr = 0, buffer.len(id_buffer) - F64_BYTES, F64_BYTES do
 			list_count += 1
@@ -984,11 +984,11 @@ local function ecs_new(_: any)
 	end
 
 	local function arch_insert_id_column(
-		arch: Arch,
-		id: U53,
-		columns_map: index<Arch, "columns_map">,
+		arch: arch,
+		id: u53,
+		columns_map: index<arch, "columns_map">,
 		ids_index: number,
-		append_column: Column
+		append_column: column
 	): ()
 		local id_record = id_record_ensure(id)
 		if ENT_PAIR_EH(id) then
@@ -1009,16 +1009,16 @@ local function ecs_new(_: any)
 		id_record_insert_arch(id_record, arch, ids_index)
 	end
 
-	local function arch_new(agraph_node: ArchGraphNode): Arch
+	local function arch_new(agraph_node: arch_graph_node): arch
 		local arch_location = archetypes_count + 1
 		archetypes_count = arch_location
 
-		local arch_columns_map: Set<U53, Column> = {}
-		local arch_columns: { Column } = {}
-		local arch_ids: { U53 } = {}
+		local arch_columns_map: set<u53, column> = {}
+		local arch_columns: { column } = {}
+		local arch_ids: { u53 } = {}
 		local arch_ids_count = 0
 
-		local arch: Arch = {
+		local arch: arch = {
 			pages_record = 0,
 			bitset_pages = NULLPTR,
 			watchers = false,
@@ -1080,14 +1080,14 @@ local function ecs_new(_: any)
 	end
 
 	-- unused for now, left as a user-facing internal API
-	local function agraph_ensure(ids: buffer): ArchGraphNode
+	local function agraph_ensure(ids: buffer): arch_graph_node
 		local hash = buffer.tostring(ids)
 		do
 			local cached = agraph[hash]
 			if cached then return cached end
 		end
 
-		local node: ArchGraphNode = {
+		local node: arch_graph_node = {
 			ids = ids,
 		}
 		agraph[hash] = node
@@ -1095,7 +1095,7 @@ local function ecs_new(_: any)
 		return node
 	end
 
-	local function agraph_ensure_arch(node: ArchGraphNode): Arch
+	local function agraph_ensure_arch(node: arch_graph_node): arch
 		do
 			local arch = node.arch
 			if arch then return arch end
@@ -1155,7 +1155,7 @@ local function ecs_new(_: any)
 		return ptr
 	end
 
-	local function agraph_traverse_add(src: ArchGraphNode, id: U53): ArchGraphNode
+	local function agraph_traverse_add(src: arch_graph_node, id: u53): arch_graph_node
 		local src_ids = src.ids
 		local src_ids_len = buffer.len(src_ids)
 
@@ -1183,7 +1183,7 @@ local function ecs_new(_: any)
 			end
 		end
 
-		local traversed: ArchGraphNode = {
+		local traversed: arch_graph_node = {
 			ids = traversed_ids,
 			[id] = src,
 		}
@@ -1193,7 +1193,7 @@ local function ecs_new(_: any)
 		return traversed
 	end
 
-	local function agraph_traverse_add_ensure(src: ArchGraphNode, id: U53): ArchGraphNode
+	local function agraph_traverse_add_ensure(src: arch_graph_node, id: u53): arch_graph_node
 		do
 			local traversed = src[id]
 			if traversed then return traversed end
@@ -1202,7 +1202,7 @@ local function ecs_new(_: any)
 		return (agraph_traverse_add(src, id))
 	end
 
-	local function buff_remove_id(buff: buffer, remove_ptr: Ptr): buffer
+	local function buff_remove_id(buff: buffer, remove_ptr: ptr): buffer
 		local resized_len = buffer.len(buff) - F64_BYTES
 		local resized_buff = buffer.create(resized_len)
 
@@ -1216,7 +1216,7 @@ local function ecs_new(_: any)
 		return resized_buff
 	end
 
-	local function agraph_traverse_rem(src: ArchGraphNode, id: U53): ArchGraphNode
+	local function agraph_traverse_rem(src: arch_graph_node, id: u53): arch_graph_node
 		local src_ids = src.ids
 
 		local remove_ptr = ASSERT(binary_search(src_ids, id), "Internal Error")
@@ -1233,7 +1233,7 @@ local function ecs_new(_: any)
 			end
 		end
 
-		local traversed: ArchGraphNode = {
+		local traversed: arch_graph_node = {
 			ids = traversed_ids,
 			[id] = src,
 		}
@@ -1243,7 +1243,7 @@ local function ecs_new(_: any)
 		return traversed
 	end
 
-	local function agraph_traverse_rem_ensure(src: ArchGraphNode, id: U53): ArchGraphNode
+	local function agraph_traverse_rem_ensure(src: arch_graph_node, id: u53): arch_graph_node
 		do
 			local traversed = src[id]
 			if traversed then return traversed end
@@ -1252,7 +1252,7 @@ local function ecs_new(_: any)
 		return (agraph_traverse_rem(src, id))
 	end
 
-	local function ecs_add(entity: U53, id: U53): ()
+	local function ecs_add(entity: u53, id: u53): ()
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
@@ -1262,7 +1262,7 @@ local function ecs_new(_: any)
 		local id_record = id_record_ensure(id)
 		local flags = INDEX(id_record, idr_flags)
 		local relation = id
-		local dst_node: ArchGraphNode
+		local dst_node: arch_graph_node
 		if ENT_PAIR_EH(id) and bit32.btest(flags, IDFLAG_EXCLUSIVE) then
 			relation = ENT_PAIR_HI(id)
 			local target = ecs_target(entity, relation)
@@ -1302,7 +1302,7 @@ local function ecs_new(_: any)
 		invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 	end
 
-	local function ecs_bulk_add(entity: U53, add_ids: { U53 }): ()
+	local function ecs_bulk_add(entity: u53, add_ids: { u53 }): ()
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
@@ -1360,7 +1360,7 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ecs_component(): U53
+	local function ecs_component(): u53
 		local id = user_components_count + 1
 		if id > MAX_COMPONENT then error(`Cannot create component above {MAX_COMPONENT}`, 2) end
 		user_components_count = id
@@ -1369,7 +1369,7 @@ local function ecs_new(_: any)
 		return id
 	end
 
-	local function ecs_set(entity: U53, id: U53, data: any): ()
+	local function ecs_set(entity: u53, id: u53, data: any): ()
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
@@ -1393,7 +1393,7 @@ local function ecs_new(_: any)
 			local id_record = id_record_ensure(id)
 			local flags = INDEX(id_record, idr_flags)
 			local relation = id
-			local dst_node: ArchGraphNode
+			local dst_node: arch_graph_node
 			if ENT_PAIR_EH(id) and bit32.btest(flags, IDFLAG_EXCLUSIVE) then
 				relation = ENT_PAIR_HI(id)
 				local target = ecs_target(entity, relation)
@@ -1438,7 +1438,7 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ecs_bulk_set(entity: U53, set_ids: { U53 }, data: { any }): ()
+	local function ecs_bulk_set(entity: u53, set_ids: { u53 }, data: { any }): ()
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
@@ -1450,7 +1450,7 @@ local function ecs_new(_: any)
 		local dst_node = record_arch.graph
 		for set_ids_index = 1, set_ids_count do
 			local id = set_ids[set_ids_index]
-			local column: Column = record_arch_column_map[id]
+			local column: column = record_arch_column_map[id]
 			local setting_data = data[set_ids_index]
 			if column then
 				local id_record = cindex[id]
@@ -1537,16 +1537,16 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local function ecs_remove(entity: U53, id: U53): ()
+	local function ecs_remove(entity: u53, id: u53): ()
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
 		local record_arch = record.arch
 		if not record_arch.columns_map[id] then return end
 
-		local dst_node: ArchGraphNode
+		local dst_node: arch_graph_node
 
-		local id_record = cindex[id] :: IdRecord
+		local id_record = cindex[id] :: id_record
 		local flags = INDEX(id_record, idr_flags)
 		if bit32.btest(flags, IDFLAG_MAYBEIMPLICIT) then
 			local archetypes_sparse = INDEX(id_record, idr_arch_sparse)
@@ -1557,7 +1557,7 @@ local function ecs_new(_: any)
 			local associated_id = ids[id_target_position]
 			if associated_id ~= id then
 				id = associated_id
-				id_record = cindex[id] :: IdRecord
+				id_record = cindex[id] :: id_record
 				flags = INDEX(id_record, idr_flags)
 			end
 		end
@@ -1578,7 +1578,7 @@ local function ecs_new(_: any)
 		invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 	end
 
-	local function ecs_bulk_remove(entity: U53, remove_ids: { U53 }): ()
+	local function ecs_bulk_remove(entity: u53, remove_ids: { u53 }): ()
 		local record = eindex_try_matching_record(entity)
 		if not record then return end
 
@@ -1602,7 +1602,7 @@ local function ecs_new(_: any)
 				local associated_id = ids[id_target_position]
 				if associated_id ~= id then
 					id = associated_id
-					id_record = cindex[id] :: IdRecord
+					id_record = cindex[id] :: id_record
 					flags = INDEX(id_record, idr_flags)
 				end
 			end
@@ -1638,7 +1638,7 @@ local function ecs_new(_: any)
 	entity.
 	- We can put checks for on_remove hooks and/or watcher lists outside of inner loops
 	]]
-	local function ecs_clear(input_entity: U53, delete: boolean?): ()
+	local function ecs_clear(input_entity: u53, delete: boolean?): ()
 		local record = eindex_try_matching_record(input_entity)
 		if not record then return end
 		if record.deleting then return end
@@ -1688,12 +1688,12 @@ local function ecs_new(_: any)
 
 		local wildcard_object_id_record = cindex[wildcard_object]
 		if wildcard_object_id_record then
-			local removal_archs: { Arch } = {}
-			local removal_lists: { IdList } = {}
+			local removal_archs: { arch } = {}
+			local removal_lists: { id_list } = {}
 			local entity_counts: { number } = {}
 			local removal_count = 0
 
-			local removal_list: { U53 } = {}
+			local removal_list: { u53 } = {}
 			local removal_list_count = 0
 
 			local dense_cached = INDEX(wildcard_object_id_record, idr_dense_cached)
@@ -1784,12 +1784,12 @@ local function ecs_new(_: any)
 					end
 				end
 			else
-				local removal_archs: { Arch } = {}
-				local removal_lists: { IdList } = {}
+				local removal_archs: { arch } = {}
+				local removal_lists: { id_list } = {}
 				local entity_counts: { number } = {}
 				local removal_count = 0
 
-				local removal_list: { U53 } = {}
+				local removal_list: { u53 } = {}
 				local removal_list_count = 0
 
 				for dense_index = 1, #dense_cached do
@@ -1863,7 +1863,7 @@ local function ecs_new(_: any)
 		eindex_alive_count = swap_index - 1
 
 		local swap_entity = eindex_dense[swap_index]
-		local swap_record = eindex_try_any_record(swap_entity) :: EntRecord
+		local swap_record = eindex_try_any_record(swap_entity) :: ent_record
 
 		swap_record.dense = dense
 		record.dense = swap_index
@@ -1877,7 +1877,7 @@ local function ecs_new(_: any)
 		eindex_dense[swap_index] = input_entity
 	end
 
-	local function arch_delete(arch: Arch): ()
+	local function arch_delete(arch: arch): ()
 		if arch == ROOT_ARCHETYPE then return end
 
 		for id in arch.columns_map do
@@ -1893,7 +1893,7 @@ local function ecs_new(_: any)
 			local id_record = cindex[id]
 			local arch_count = INDEX(id_record, idr_arch_count)
 			local new_arch_count = arch_count - 1
-			(id_record :: { [typeof(idr_arch_count)]: index<IdRecord, typeof(idr_arch_count)> })[idr_arch_count] =
+			(id_record :: { [typeof(idr_arch_count)]: index<id_record, typeof(idr_arch_count)> })[idr_arch_count] =
 				new_arch_count
 
 			local arch_sparse = INDEX(id_record, idr_arch_sparse)
@@ -1967,14 +1967,14 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local query_matcher_cache: { [string]: QueryMatcher } = setmetatable({}, { __mode = "v" }) :: typeof({})
-	local function query_matcher_hash(query_with: IdList, query_without: IdList): string
+	local query_matcher_cache: { [string]: query_matcher } = setmetatable({}, { __mode = "v" }) :: typeof({})
+	local function query_matcher_hash(query_with: id_list, query_without: id_list): string
 		local with_hash = ORDERED_HASH(query_with)
 		local without_hash = ORDERED_HASH(query_without)
 		local hashed = `{with_hash}\1{without_hash}`
 		return hashed
 	end
-	local function query_matcher_new(hashed_fast: string, query_with: IdList, query_without: IdList): QueryMatcher
+	local function query_matcher_new(hashed_fast: string, query_with: id_list, query_without: id_list): query_matcher
 		local query_with_slow, query_with_ptrs, query_with_bitsets, with_pages_record = ids_page_mapping(query_with)
 		local query_without_slow, query_without_ptrs, query_without_bitsets = ids_page_mapping(query_without)
 		local with_pages_count = #query_with_ptrs
@@ -2009,7 +2009,7 @@ local function ecs_new(_: any)
 			if has_wopg then
 				if has_wisl then
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2052,7 +2052,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2092,7 +2092,7 @@ local function ecs_new(_: any)
 					end
 				else
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2130,7 +2130,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2165,7 +2165,7 @@ local function ecs_new(_: any)
 			else
 				if has_wisl then
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2198,7 +2198,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2228,7 +2228,7 @@ local function ecs_new(_: any)
 					end
 				else
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2256,7 +2256,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2283,7 +2283,7 @@ local function ecs_new(_: any)
 			if has_wopg then
 				if has_wisl then
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2316,7 +2316,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2346,7 +2346,7 @@ local function ecs_new(_: any)
 					end
 				else
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2374,7 +2374,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							do
 								local match_fast = bit32.band(arch.pages_record, with_pages_record) == with_pages_record
 								if not match_fast then return false end
@@ -2399,7 +2399,7 @@ local function ecs_new(_: any)
 			else
 				if has_wisl then
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							local columns_sparse = arch.columns_map
 
 							for slow_index = 1, query_with_slow_count do
@@ -2415,7 +2415,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							local columns_sparse = arch.columns_map
 
 							for slow_index = 1, query_with_slow_count do
@@ -2428,7 +2428,7 @@ local function ecs_new(_: any)
 					end
 				else
 					if has_wosl then
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							local columns_sparse = arch.columns_map
 
 							for slow_index = 1, query_without_slow_count do
@@ -2439,7 +2439,7 @@ local function ecs_new(_: any)
 							return true
 						end
 					else
-						function query_match(arch: Arch): boolean
+						function query_match(arch: arch): boolean
 							return true
 						end
 					end
@@ -2452,7 +2452,7 @@ local function ecs_new(_: any)
 
 		return query_match
 	end
-	local function query_matcher_ensure(query_with: IdList, query_without: IdList): QueryMatcher
+	local function query_matcher_ensure(query_with: id_list, query_without: id_list): query_matcher
 		local hashed_fast = query_matcher_hash(query_with, query_without)
 		do
 			local cached = query_matcher_cache[hashed_fast]
@@ -2462,12 +2462,12 @@ local function ecs_new(_: any)
 		return (query_matcher_new(hashed_fast, query_with, query_without))
 	end
 
-	local function ecs_each(id: U53): () -> U53?
+	local function ecs_each(id: u53): () -> u53?
 		local id_record = cindex[id]
-		if not id_record then return NOOP :: () -> U53? end
+		if not id_record then return NOOP :: () -> u53? end
 
 		local arch_count = INDEX(id_record, idr_arch_count)
-		if arch_count == 0 then return NOOP :: () -> U53? end
+		if arch_count == 0 then return NOOP :: () -> u53? end
 		local dense_cached = INDEX(id_record, idr_dense_cached)
 		local dense_ent_count = table.create(arch_count) :: { number }
 		for dense_index = 1, arch_count do
@@ -2478,7 +2478,7 @@ local function ecs_new(_: any)
 		local row = dense_ent_count[arch_count]
 		local entities = arch.ents
 
-		local function b2_each_iterator(): U53?
+		local function b2_each_iterator(): u53?
 			local entity = entities[row]
 			while not entity do
 				row -= 1
@@ -2539,18 +2539,18 @@ local function ecs_new(_: any)
 
 	local queryobj = {}
 	local queryobj_metatable = { __index = queryobj }
-	type QueryIdentityInternal = setmetatable<{
-		_reads: { U53 },
-		_sparse: { [U53]: number },
-		_with_dense: { U53 },
-		_without_dense: { U53 },
-		_reported_archs: { Arch }?,
-		_matcher: QueryMatcher?,
+	type query_identity_internal = setmetatable<{
+		_reads: { u53 },
+		_sparse: { [u53]: number },
+		_with_dense: { u53 },
+		_without_dense: { u53 },
+		_reported_archs: { arch }?,
+		_matcher: query_matcher?,
 	}, typeof(queryobj_metatable)>
-	type QueryWatcherInternal = {
+	type query_watcher_internal = {
 		destroy: () -> (),
 	}
-	local function ecs_query(...: U53): QueryIdentityInternal
+	local function ecs_query(...: u53): query_identity_internal
 		local sparse = {}
 		local with_dense = { ... }
 		for dense, id in with_dense do
@@ -2561,17 +2561,17 @@ local function ecs_new(_: any)
 			_sparse = sparse,
 			_with_dense = with_dense,
 			_without_dense = {},
-			_matcher = nil :: QueryMatcher?,
-			_reported_archs = nil :: { Arch }?,
+			_matcher = nil :: query_matcher?,
+			_reported_archs = nil :: { arch }?,
 		}, queryobj_metatable)
 		return self
 	end
 
-	function queryobj.locked(self: QueryIdentityInternal): boolean
+	function queryobj.locked(self: query_identity_internal): boolean
 		return not not self._matcher
 	end
 
-	function queryobj.with(self: QueryIdentityInternal, ...: U53): QueryIdentityInternal
+	function queryobj.with(self: query_identity_internal, ...: u53): query_identity_internal
 		ASSERT(not self:locked(), "query is locked (already in use)")
 		local dense = self._with_dense
 		local dense_count = #dense
@@ -2588,7 +2588,7 @@ local function ecs_new(_: any)
 		return self
 	end
 
-	function queryobj.without(self: QueryIdentityInternal, ...: U53): QueryIdentityInternal
+	function queryobj.without(self: query_identity_internal, ...: u53): query_identity_internal
 		ASSERT(not self:locked(), "query is locked (already in use)")
 		local dense = self._without_dense
 		local dense_count = #dense
@@ -2605,7 +2605,7 @@ local function ecs_new(_: any)
 		return self
 	end
 
-	function queryobj.match(self: QueryIdentityInternal): QueryMatcher
+	function queryobj.match(self: query_identity_internal): query_matcher
 		local matcher = self._matcher :: typeof(assert(self._matcher))
 		if not matcher then
 			matcher = query_matcher_ensure(self._with_dense, self._without_dense)
@@ -2614,7 +2614,7 @@ local function ecs_new(_: any)
 		return matcher
 	end
 
-	function queryobj.archetypes(self: QueryIdentityInternal): { Arch }
+	function queryobj.archetypes(self: query_identity_internal): { arch }
 		local with_dense = self._with_dense
 		local without_dense = self._without_dense
 		local matcher = self._matcher :: typeof(assert(self._matcher))
@@ -2630,7 +2630,7 @@ local function ecs_new(_: any)
 		]]
 		local cached_archs = archetypes
 		local cached_count = archetypes_count
-		local maximally_exclusive_id_record: IdRecord?
+		local maximally_exclusive_id_record: id_record?
 		for with_dense_index = 1, #with_dense do
 			local id = with_dense[with_dense_index]
 			local id_record = cindex[id]
@@ -2659,16 +2659,16 @@ local function ecs_new(_: any)
 		return compatible
 	end
 
-	function queryobj.outer(self: QueryIdentityInternal, cached: true?): () -> (Arch?, () -> (Row?, U53, ...any))
+	function queryobj.outer(self: query_identity_internal, cached: true?): () -> (arch?, () -> (row?, u53, ...any))
 		local compatible_archs = if cached then self:archetypes_cached() else self:archetypes()
 		local compatible_count = #compatible_archs
 
-		if compatible_count == 0 then return NOOP :: () -> (Arch?, () -> (Row?, U53, ...any)) end
+		if compatible_count == 0 then return NOOP :: () -> (arch?, () -> (row?, u53, ...any)) end
 
 		local reads = self._reads
 		local reads_count = #reads
 
-		local compatible_ent_counts: { U26 } = {}
+		local compatible_ent_counts: { u26 } = {}
 		for compatible_index = 1, compatible_count do
 			local compatible_arch = compatible_archs[compatible_index]
 			compatible_ent_counts[compatible_index] = #compatible_arch.ents
@@ -2679,12 +2679,12 @@ local function ecs_new(_: any)
 		local columns_map_init = arch.columns_map
 		local row = compatible_ent_counts[compatible_count]
 
-		local query_inner: () -> (Row?, U53, ...any)
-		local query_outer: () -> (Arch?, () -> (Row?, U53, ...any)) = nil :: any
+		local query_inner: () -> (row?, u53, ...any)
+		local query_outer: () -> (arch?, () -> (row?, u53, ...any)) = nil :: any
 		if reads_count == 1 then
 			local A = reads[1]
 			local col1 = columns_map_init[A]
-			function query_inner(): (Row?, U53, ...any)
+			function query_inner(): (row?, u53, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2693,9 +2693,9 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return read_row, ent :: U53, col1[read_row]
+				return read_row, ent :: u53, col1[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2712,7 +2712,7 @@ local function ecs_new(_: any)
 			local B = reads[2]
 			local col1 = columns_map_init[A]
 			local col2 = columns_map_init[B]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2725,9 +2725,9 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return read_row, ent :: U53, col1[read_row], col2[read_row]
+				return read_row, ent :: u53, col1[read_row], col2[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2747,7 +2747,7 @@ local function ecs_new(_: any)
 			local col1 = columns_map_init[A]
 			local col2 = columns_map_init[B]
 			local col3 = columns_map_init[C]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2756,9 +2756,9 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return read_row, ent :: U53, col1[read_row], col2[read_row], col3[read_row]
+				return read_row, ent :: u53, col1[read_row], col2[read_row], col3[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2781,7 +2781,7 @@ local function ecs_new(_: any)
 			local col2 = columns_map_init[B]
 			local col3 = columns_map_init[C]
 			local col4 = columns_map_init[D]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2790,9 +2790,9 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return read_row, ent :: U53, col1[read_row], col2[read_row], col3[read_row], col4[read_row]
+				return read_row, ent :: u53, col1[read_row], col2[read_row], col3[read_row], col4[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2818,7 +2818,7 @@ local function ecs_new(_: any)
 			local col3 = columns_map_init[C]
 			local col4 = columns_map_init[D]
 			local col5 = columns_map_init[E]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2827,9 +2827,9 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return read_row, ent :: U53, col1[read_row], col2[read_row], col3[read_row], col4[read_row], col5[read_row]
+				return read_row, ent :: u53, col1[read_row], col2[read_row], col3[read_row], col4[read_row], col5[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2858,7 +2858,7 @@ local function ecs_new(_: any)
 			local col4 = columns_map_init[D]
 			local col5 = columns_map_init[E]
 			local col6 = columns_map_init[F]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2868,7 +2868,7 @@ local function ecs_new(_: any)
 				end
 				row = read_row - 1
 				return read_row,
-					ent :: U53,
+					ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -2876,7 +2876,7 @@ local function ecs_new(_: any)
 					col5[read_row],
 					col6[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2908,7 +2908,7 @@ local function ecs_new(_: any)
 			local col5 = columns_map_init[E]
 			local col6 = columns_map_init[F]
 			local col7 = columns_map_init[G]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2918,7 +2918,7 @@ local function ecs_new(_: any)
 				end
 				row = read_row - 1
 				return read_row,
-					ent :: U53,
+					ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -2927,7 +2927,7 @@ local function ecs_new(_: any)
 					col6[read_row],
 					col7[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -2962,7 +2962,7 @@ local function ecs_new(_: any)
 			local col6 = columns_map_init[F]
 			local col7 = columns_map_init[G]
 			local col8 = columns_map_init[H]
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -2972,7 +2972,7 @@ local function ecs_new(_: any)
 				end
 				row = read_row - 1
 				return read_row,
-					ent :: U53,
+					ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -2982,7 +2982,7 @@ local function ecs_new(_: any)
 					col7[read_row],
 					col8[read_row]
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -3002,7 +3002,7 @@ local function ecs_new(_: any)
 				return arch, query_inner
 			end
 		elseif reads_count == 0 then
-			function query_inner(): (Row?, U53, ...any)
+			function query_inner(): (row?, u53, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3011,9 +3011,9 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return read_row, ent :: U53
+				return read_row, ent :: u53
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -3041,12 +3041,12 @@ local function ecs_new(_: any)
 			local col7 = columns_map_init[G]
 			local col8 = columns_map_init[H]
 			local colrest_count = reads_count - 8
-			local colrest = table.create(colrest_count) :: { Column }
+			local colrest = table.create(colrest_count) :: { column }
 			for colrest_index = 1, colrest_count do
 				local Id = reads[8 + colrest_index]
 				colrest[colrest_index] = columns_map_init[Id]
 			end
-			function query_inner(): (U53?, ...any)
+			function query_inner(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3060,7 +3060,7 @@ local function ecs_new(_: any)
 					read_rest[colrest_index] = colrest[colrest_index][read_row]
 				end
 				return read_row,
-					ent :: U53,
+					ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -3071,7 +3071,7 @@ local function ecs_new(_: any)
 					col8[read_row],
 					table.unpack(read_rest)
 			end
-			function query_outer(): (Arch?, () -> (Row?, U53, ...any))
+			function query_outer(): (arch?, () -> (row?, u53, ...any))
 				local this = compatible_count
 				if this == 0 then return nil :: any end
 				compatible_count = this - 1
@@ -3098,16 +3098,16 @@ local function ecs_new(_: any)
 		return query_outer
 	end
 
-	function queryobj.entities(self: QueryIdentityInternal, cached: true?): () -> (U53?, ...any)
+	function queryobj.entities(self: query_identity_internal, cached: true?): () -> (u53?, ...any)
 		local compatible_archs = if cached then self:archetypes_cached() else self:archetypes()
 		local compatible_count = #compatible_archs
 
-		if compatible_count == 0 then return NOOP :: () -> U53? end
+		if compatible_count == 0 then return NOOP :: () -> u53? end
 
 		local reads = self._reads
 		local reads_count = #reads
 
-		local compatible_ent_counts = table.create(compatible_count) :: { U26 }
+		local compatible_ent_counts = table.create(compatible_count) :: { u26 }
 		for compatible_index = 1, compatible_count do
 			local compatible_arch = compatible_archs[compatible_index]
 			compatible_ent_counts[compatible_index] = #compatible_arch.ents
@@ -3118,11 +3118,11 @@ local function ecs_new(_: any)
 		local columns_map_init = arch.columns_map
 		local row = compatible_ent_counts[compatible_count]
 
-		local query_iter: () -> (U53?, ...any)
+		local query_iter: () -> (u53?, ...any)
 		if reads_count == 1 then
 			local A = reads[1]
 			local col1 = columns_map_init[A]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3140,14 +3140,14 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53, col1[read_row]
+				return ent :: u53, col1[read_row]
 			end
 		elseif reads_count == 2 then
 			local A = reads[1]
 			local B = reads[2]
 			local col1 = columns_map_init[A]
 			local col2 = columns_map_init[B]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3166,7 +3166,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row]
+				return ent :: u53, col1[read_row], col2[read_row]
 			end
 		elseif reads_count == 3 then
 			local A = reads[1]
@@ -3175,7 +3175,7 @@ local function ecs_new(_: any)
 			local col1 = columns_map_init[A]
 			local col2 = columns_map_init[B]
 			local col3 = columns_map_init[C]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3195,7 +3195,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row], col3[read_row]
+				return ent :: u53, col1[read_row], col2[read_row], col3[read_row]
 			end
 		elseif reads_count == 4 then
 			local A = reads[1]
@@ -3206,7 +3206,7 @@ local function ecs_new(_: any)
 			local col2 = columns_map_init[B]
 			local col3 = columns_map_init[C]
 			local col4 = columns_map_init[D]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3227,7 +3227,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row], col3[read_row], col4[read_row]
+				return ent :: u53, col1[read_row], col2[read_row], col3[read_row], col4[read_row]
 			end
 		elseif reads_count == 5 then
 			local A = reads[1]
@@ -3240,7 +3240,7 @@ local function ecs_new(_: any)
 			local col3 = columns_map_init[C]
 			local col4 = columns_map_init[D]
 			local col5 = columns_map_init[E]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3262,7 +3262,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53, col1[read_row], col2[read_row], col3[read_row], col4[read_row], col5[read_row]
+				return ent :: u53, col1[read_row], col2[read_row], col3[read_row], col4[read_row], col5[read_row]
 			end
 		elseif reads_count == 6 then
 			local A = reads[1]
@@ -3277,7 +3277,7 @@ local function ecs_new(_: any)
 			local col4 = columns_map_init[D]
 			local col5 = columns_map_init[E]
 			local col6 = columns_map_init[F]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3300,7 +3300,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53,
+				return ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -3323,7 +3323,7 @@ local function ecs_new(_: any)
 			local col5 = columns_map_init[E]
 			local col6 = columns_map_init[F]
 			local col7 = columns_map_init[G]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3347,7 +3347,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53,
+				return ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -3373,7 +3373,7 @@ local function ecs_new(_: any)
 			local col6 = columns_map_init[F]
 			local col7 = columns_map_init[G]
 			local col8 = columns_map_init[H]
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3398,7 +3398,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53,
+				return ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -3409,7 +3409,7 @@ local function ecs_new(_: any)
 					col8[read_row]
 			end
 		elseif reads_count == 0 then
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3425,7 +3425,7 @@ local function ecs_new(_: any)
 					ent = entities[read_row]
 				end
 				row = read_row - 1
-				return ent :: U53
+				return ent :: u53
 			end
 		else
 			local A = reads[1]
@@ -3445,12 +3445,12 @@ local function ecs_new(_: any)
 			local col7 = columns_map_init[G]
 			local col8 = columns_map_init[H]
 			local colrest_count = reads_count - 8
-			local colrest = table.create(colrest_count) :: { Column }
+			local colrest = table.create(colrest_count) :: { column }
 			for colrest_index = 1, colrest_count do
 				local Id = reads[8 + colrest_index]
 				colrest[colrest_index] = columns_map_init[Id]
 			end
-			function query_iter(): (U53?, ...any)
+			function query_iter(): (u53?, ...any)
 				local read_row = row
 				local ent = entities[read_row]
 				while not ent do
@@ -3471,7 +3471,7 @@ local function ecs_new(_: any)
 						col6 = columns_map[F]
 						col7 = columns_map[G]
 						col8 = columns_map[H]
-						colrest = table.create(colrest_count) :: { Column }
+						colrest = table.create(colrest_count) :: { column }
 						for colrest_index = 1, colrest_count do
 							local Id = reads[8 + colrest_index]
 							colrest[colrest_index] = columns_map[Id]
@@ -3484,7 +3484,7 @@ local function ecs_new(_: any)
 				for colrest_index = 1, colrest_count do
 					read_rest[colrest_index] = colrest[colrest_index][read_row]
 				end
-				return ent :: U53,
+				return ent :: u53,
 					col1[read_row],
 					col2[read_row],
 					col3[read_row],
@@ -3500,11 +3500,11 @@ local function ecs_new(_: any)
 		return query_iter
 	end
 
-	function queryobj.report_added(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
+	function queryobj.report_added(self: query_identity_internal, callback: (arch) -> ()): () -> ()
 		local with_dense = self._with_dense
 		local First = ASSERT(with_dense[1], "Internal Error")
 
-		local added_cached: index<typeof(report_arch_added), U53>
+		local added_cached: index<typeof(report_arch_added), u53>
 		for with_index = 1, #with_dense do
 			local cache = report_arch_added[with_dense[with_index]]
 			if cache then
@@ -3512,12 +3512,12 @@ local function ecs_new(_: any)
 				break
 			end
 		end
-		local reporter: Reporter<(Arch)> = {
+		local reporter: reporter<(arch)> = {
 			match = self:match(),
 			callback = callback,
 		}
 		if not added_cached then
-			added_cached = { reporter } :: index<typeof(report_arch_added), U53>
+			added_cached = { reporter } :: index<typeof(report_arch_added), u53>
 			report_arch_added[First] = added_cached
 		else
 			table.insert(added_cached, reporter)
@@ -3536,11 +3536,11 @@ local function ecs_new(_: any)
 		return reporter_destroy
 	end
 
-	function queryobj.report_removed(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
+	function queryobj.report_removed(self: query_identity_internal, callback: (arch) -> ()): () -> ()
 		local with_dense = self._with_dense
 		local First = ASSERT(with_dense[1], "Internal Error")
 
-		local removed_cached: index<typeof(report_arch_removed), U53>
+		local removed_cached: index<typeof(report_arch_removed), u53>
 		for with_index = 1, #with_dense do
 			local cache = report_arch_removed[with_dense[with_index]]
 			if cache then
@@ -3548,12 +3548,12 @@ local function ecs_new(_: any)
 				break
 			end
 		end
-		local reporter: Reporter<(Arch)> = {
+		local reporter: reporter<(arch)> = {
 			match = self:match(),
 			callback = callback,
 		}
 		if not removed_cached then
-			removed_cached = { reporter } :: index<typeof(report_arch_removed), U53>
+			removed_cached = { reporter } :: index<typeof(report_arch_removed), u53>
 			report_arch_removed[First] = removed_cached
 		else
 			table.insert(removed_cached, reporter)
@@ -3572,11 +3572,11 @@ local function ecs_new(_: any)
 		return reporter_destroy
 	end
 
-	function queryobj.watch_rows(self: QueryIdentityInternal, callback: WatcherCallback): QueryWatcherInternal
+	function queryobj.watch_rows(self: query_identity_internal, callback: watcher_callback): query_watcher_internal
 		local entity = ecs_entity()
 		watcher_callbacks[entity] = callback
 
-		local function arch_added(arch: Arch): ()
+		local function arch_added(arch: arch): ()
 			local watchers = arch.watchers
 			if watchers then
 				binary_table_insert(watchers, entity)
@@ -3592,7 +3592,7 @@ local function ecs_new(_: any)
 
 		local function watcher_destroy(): ()
 			destroy_reporter()
-			local archetypes = self:archetypes() :: {Arch}
+			local archetypes = self:archetypes() :: {arch}
 			local archetypes_count = #archetypes
 			for archetypes_index = 1, archetypes_count do
 				local arch = archetypes[archetypes_index]
@@ -3611,14 +3611,14 @@ local function ecs_new(_: any)
 		}
 	end
 
-	function queryobj.watch_added(self: QueryIdentityInternal, callback: (U53, ...any) -> ()): QueryWatcherInternal
+	function queryobj.watch_added(self: query_identity_internal, callback: (u53, ...any) -> ()): query_watcher_internal
 		local reads = self._reads
 		local reads_count = #reads
 
-		local wrapper_callback: WatcherCallback
+		local wrapper_callback: watcher_callback
 		if reads_count == 1 then
 			local A = reads[1]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A], row)
@@ -3626,7 +3626,7 @@ local function ecs_new(_: any)
 		elseif reads_count == 2 then
 			local A = reads[1]
 			local B = reads[2]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row])
@@ -3635,7 +3635,7 @@ local function ecs_new(_: any)
 			local A = reads[1]
 			local B = reads[2]
 			local C = reads[3]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row], columns_map[C][row])
@@ -3645,7 +3645,7 @@ local function ecs_new(_: any)
 			local B = reads[2]
 			local C = reads[3]
 			local D = reads[4]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row], columns_map[C][row], columns_map[D][row])
@@ -3656,7 +3656,7 @@ local function ecs_new(_: any)
 			local C = reads[3]
 			local D = reads[4]
 			local E = reads[5]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3675,7 +3675,7 @@ local function ecs_new(_: any)
 			local D = reads[4]
 			local E = reads[5]
 			local F = reads[6]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3696,7 +3696,7 @@ local function ecs_new(_: any)
 			local E = reads[5]
 			local F = reads[6]
 			local G = reads[7]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3719,7 +3719,7 @@ local function ecs_new(_: any)
 			local F = reads[6]
 			local G = reads[7]
 			local H = reads[8]
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3746,7 +3746,7 @@ local function ecs_new(_: any)
 			local G = reads[7]
 			local H = reads[8]
 			local rest_size = reads_count - 8
-			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: watcher_event, entity: u53, _, arch: arch, row: row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				local rest = table.create(rest_size)
@@ -3773,8 +3773,8 @@ local function ecs_new(_: any)
 		return (self:watch_rows(wrapper_callback))
 	end
 
-	function queryobj.watch_removed(self: QueryIdentityInternal, callback: (U53) -> ()): QueryWatcherInternal
-		local function wrapper_callback(event: WatcherEvent, entity: U53): ()
+	function queryobj.watch_removed(self: query_identity_internal, callback: (u53) -> ()): query_watcher_internal
+		local function wrapper_callback(event: watcher_event, entity: u53): ()
 			if event ~= "removed" then return end
 			callback(entity)
 		end
@@ -3782,7 +3782,7 @@ local function ecs_new(_: any)
 		return (self:watch_rows(wrapper_callback))
 	end
 
-	function queryobj.archetypes_cached(self: QueryIdentityInternal): { Arch }
+	function queryobj.archetypes_cached(self: query_identity_internal): { arch }
 		do
 			local cached = self._reported_archs
 			if cached then return cached end
@@ -3791,7 +3791,7 @@ local function ecs_new(_: any)
 		local First = with_dense[1]
 		if not First then error("cannot get archetype cache from blank query") end
 
-		local added_cached: index<typeof(report_arch_added), U53>
+		local added_cached: index<typeof(report_arch_added), u53>
 		for with_index = 1, #with_dense do
 			local cache = report_arch_added[with_dense[with_index]]
 			if cache then
@@ -3800,11 +3800,11 @@ local function ecs_new(_: any)
 			end
 		end
 		if not added_cached then
-			added_cached = {} :: index<typeof(report_arch_added), U53>
+			added_cached = {} :: index<typeof(report_arch_added), u53>
 			report_arch_added[First] = added_cached
 		end
 
-		local removed_cached: index<typeof(report_arch_removed), U53>
+		local removed_cached: index<typeof(report_arch_removed), u53>
 		for with_index = 1, #with_dense do
 			local cache = report_arch_removed[with_dense[with_index]]
 			if cache then
@@ -3813,25 +3813,25 @@ local function ecs_new(_: any)
 			end
 		end
 		if not removed_cached then
-			removed_cached = {} :: index<typeof(report_arch_removed), U53>
+			removed_cached = {} :: index<typeof(report_arch_removed), u53>
 			report_arch_removed[First] = removed_cached
 		end
 
-		local arch_cache_dense: { [U26]: Arch } = self:archetypes()
+		local arch_cache_dense: { [u26]: arch } = self:archetypes()
 		local arch_cache_dense_count = #arch_cache_dense
-		local arch_cache_sparse: Set<Arch, U26> = {}
+		local arch_cache_sparse: set<arch, u26> = {}
 		for dense_index = 1, arch_cache_dense_count do
 			local arch = arch_cache_dense[dense_index]
 			arch_cache_sparse[arch] = dense_index
 		end
 
-		local function reporting_added(arch: Arch): ()
+		local function reporting_added(arch: arch): ()
 			local dense_location = arch_cache_dense_count + 1
 			arch_cache_dense_count = dense_location
 			arch_cache_dense[arch_cache_dense_count] = arch
 		end
 
-		local function reporting_removed(arch: Arch): ()
+		local function reporting_removed(arch: arch): ()
 			local dense_location = arch_cache_sparse[arch]
 			local dense_swap = arch_cache_dense_count
 			arch_cache_dense_count = dense_swap - 1
@@ -3989,123 +3989,123 @@ local function ecs_new(_: any)
 	}
 end
 
-export type Ent<T = any> = { _B2: T }
-export type Id<T = nil> = Ent<T>
+export type ent<T = any> = { _B2: T }
+export type id<T = nil> = ent<T>
 
-type Destructor = () -> ()
-export type QueryWatcher = {
-	destroy: Destructor,
+type destructor = () -> ()
+export type query_watcher = {
+	destroy: destructor,
 }
 
-export type Query<Reads...> = {
-	locked: (self: Query<Reads...>) -> boolean,
-	with: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
-	without: (self: Query<Reads...>, ...Ent) -> Query<Reads...>,
-	match: (self: Query<Reads...>) -> (Arch) -> boolean,
-	archetypes: (self: Query<Reads...>) -> { Arch },
-	outer: (self: Query<Reads...>, cached: true?) -> () -> (Arch, () -> (Row, Ent, Reads...)),
-	entities: (self: Query<Reads...>, cached: true?) -> () -> (Ent, Reads...),
-	archetypes_cached: (self: Query<Reads...>) -> { Arch },
-	report_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
-	report_removed: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
-	watch_rows: (self: Query<Reads...>, callback: WatcherCallback) -> QueryWatcher,
-	watch_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> QueryWatcher,
-	watch_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> QueryWatcher,
+export type query<Reads...> = {
+	locked: (self: query<Reads...>) -> boolean,
+	with: (self: query<Reads...>, ...ent) -> query<Reads...>,
+	without: (self: query<Reads...>, ...ent) -> query<Reads...>,
+	match: (self: query<Reads...>) -> (arch) -> boolean,
+	archetypes: (self: query<Reads...>) -> { arch },
+	outer: (self: query<Reads...>, cached: true?) -> () -> (arch, () -> (row, ent, Reads...)),
+	entities: (self: query<Reads...>, cached: true?) -> () -> (ent, Reads...),
+	archetypes_cached: (self: query<Reads...>) -> { arch },
+	report_added: (self: query<Reads...>, callback: (arch) -> ()) -> destructor,
+	report_removed: (self: query<Reads...>, callback: (arch) -> ()) -> destructor,
+	watch_rows: (self: query<Reads...>, callback: watcher_callback) -> query_watcher,
+	watch_added: (self: query<Reads...>, callback: (ent, Reads...) -> ()) -> query_watcher,
+	watch_removed: (self: query<Reads...>, callback: (ent) -> ()) -> query_watcher,
 }
 
-export type OldSolverECS = {
-	arch_data: ((archetype: Arch) -> { Ent | false })
-		& (<A>(archetype: Arch, a: Ent<A>) -> ({ Ent | false }, { A }))
-		& (<A, B>(archetype: Arch, a: Ent<A>, b: Ent<B>) -> ({ Ent | false }, { A }, { B }))
+export type old_solver_ecs = {
+	arch_data: ((archetype: arch) -> { ent | false })
+		& (<A>(archetype: arch, a: ent<A>) -> ({ ent | false }, { A }))
+		& (<A, B>(archetype: arch, a: ent<A>, b: ent<B>) -> ({ ent | false }, { A }, { B }))
 		& (<A, B, C>(
-			archetype: Arch,
-			a: Ent<A>,
-			b: Ent<B>,
-			c: Ent<C>
-		) -> ({ Ent | false }, { A }, { B }, { C }))
+			archetype: arch,
+			a: ent<A>,
+			b: ent<B>,
+			c: ent<C>
+		) -> ({ ent | false }, { A }, { B }, { C }))
 		& (<A, B, C, D>(
-			archetype: Arch,
-			a: Ent<A>,
-			b: Ent<B>,
-			c: Ent<C>,
-			d: Ent<D>
-		) -> ({ Ent | false }, { A }, { B }, { C }, { D }))
+			archetype: arch,
+			a: ent<A>,
+			b: ent<B>,
+			c: ent<C>,
+			d: ent<D>
+		) -> ({ ent | false }, { A }, { B }, { C }, { D }))
 		& (<A, B, C, D, E>(
-			archetype: Arch,
-			a: Ent<A>,
-			b: Ent<B>,
-			c: Ent<C>,
-			d: Ent<D>,
-			e: Ent<E>
-		) -> ({ Ent | false }, { A }, { B }, { C }, { D }, { E }))
+			archetype: arch,
+			a: ent<A>,
+			b: ent<B>,
+			c: ent<C>,
+			d: ent<D>,
+			e: ent<E>
+		) -> ({ ent | false }, { A }, { B }, { C }, { D }, { E }))
 		& (<A, B, C, D, E, F>(
-			archetype: Arch,
-			a: Ent<A>,
-			b: Ent<B>,
-			c: Ent<C>,
-			d: Ent<D>,
-			e: Ent<E>,
-			f: Ent<F>
-		) -> ({ Ent | false }, { A }, { B }, { C }, { D }, { E }, { F }))
+			archetype: arch,
+			a: ent<A>,
+			b: ent<B>,
+			c: ent<C>,
+			d: ent<D>,
+			e: ent<E>,
+			f: ent<F>
+		) -> ({ ent | false }, { A }, { B }, { C }, { D }, { E }, { F }))
 		& (<A, B, C, D, E, F, G>(
-			archetype: Arch,
-			a: Ent<A>,
-			b: Ent<B>,
-			c: Ent<C>,
-			d: Ent<D>,
-			e: Ent<E>,
-			f: Ent<F>,
-			...Ent<G>
-		) -> ({ Ent | false }, { A }, { B }, { C }, { D }, { E }, { F }, ...{ G })),
+			archetype: arch,
+			a: ent<A>,
+			b: ent<B>,
+			c: ent<C>,
+			d: ent<D>,
+			e: ent<E>,
+			f: ent<F>,
+			...ent<G>
+		) -> ({ ent | false }, { A }, { B }, { C }, { D }, { E }, { F }, ...{ G })),
 	-- has an entity with this ID ever existed under any generation?
-	existed: (entity: Ent) -> boolean,
+	existed: (entity: ent) -> boolean,
 	-- does an entity with this ID exist, and is it alive?
-	contains: (entity: Ent) -> boolean,
-	entity: () -> Ent,
-	ids_of: (Ent) -> { Ent },
-	in_use: (Ent) -> boolean,
-	get: (<A>(entity: Ent, component: Ent<A>) -> A?)
-		& (<A, B>(entity: Ent, a: Ent<A>, b: Ent<B>) -> (A?, B?))
-		& (<A, B, C>(entity: Ent, a: Ent<A>, b: Ent<B>, c: Ent<C>) -> (A?, B?, C?))
-		& (<A, B, C, D>(entity: Ent, a: Ent<A>, b: Ent<B>, c: Ent<C>, d: Ent<D>) -> (A?, B?, C?, D?)),
-	bulk_get: (entity: Ent, components: { Ent }) -> { any },
-	has: (entity: Ent, A: Ent, ...Ent) -> boolean,
-	target: (entity: Ent, rel: Ent, idx: number?) -> Ent?,
-	parent: (entity: Ent) -> Ent?,
-	add: (entity: Ent, A: Ent) -> (),
-	bulk_add: (entity: Ent, components: { Ent }) -> (),
-	component: <Data>() -> Ent<Data>,
-	set: <Data>(entity: Ent, component: Ent<Data>, data: Data) -> (),
-	bulk_set: (entity: Ent, components: { Ent }, values: { any }) -> (),
-	remove: (entity: Ent, component: Ent) -> (),
-	bulk_remove: (entity: Ent, components: { Ent }) -> (),
-	clear: (entity: Ent, delete: boolean?) -> (),
+	contains: (entity: ent) -> boolean,
+	entity: () -> ent,
+	ids_of: (ent) -> { ent },
+	in_use: (ent) -> boolean,
+	get: (<A>(entity: ent, component: ent<A>) -> A?)
+		& (<A, B>(entity: ent, a: ent<A>, b: ent<B>) -> (A?, B?))
+		& (<A, B, C>(entity: ent, a: ent<A>, b: ent<B>, c: ent<C>) -> (A?, B?, C?))
+		& (<A, B, C, D>(entity: ent, a: ent<A>, b: ent<B>, c: ent<C>, d: ent<D>) -> (A?, B?, C?, D?)),
+	bulk_get: (entity: ent, components: { ent }) -> { any },
+	has: (entity: ent, A: ent, ...ent) -> boolean,
+	target: (entity: ent, rel: ent, idx: number?) -> ent?,
+	parent: (entity: ent) -> ent?,
+	add: (entity: ent, A: ent) -> (),
+	bulk_add: (entity: ent, components: { ent }) -> (),
+	component: <Data>() -> ent<Data>,
+	set: <Data>(entity: ent, component: ent<Data>, data: Data) -> (),
+	bulk_set: (entity: ent, components: { ent }, values: { any }) -> (),
+	remove: (entity: ent, component: ent) -> (),
+	bulk_remove: (entity: ent, components: { ent }) -> (),
+	clear: (entity: ent, delete: boolean?) -> (),
 	cleanup: () -> (),
 	ensure_dense_archetypes: () -> (),
-	each: (id: Ent) -> () -> Ent?,
-	query: (() -> Query<>)
-		& (<A>(A: Ent<A>) -> Query<A>)
-		& (<A, B>(A: Ent<A>, B: Ent<B>) -> Query<A, B>)
-		& (<A, B, C>(A: Ent<A>, B: Ent<B>, C: Ent<C>) -> Query<A, B, C>)
-		& (<A, B, C, D>(A: Ent<A>, B: Ent<B>, C: Ent<C>, D: Ent<D>) -> Query<A, B, C, D>)
-		& (<A, B, C, D, E>(A: Ent<A>, B: Ent<B>, C: Ent<C>, D: Ent<D>, E: Ent<E>) -> Query<A, B, C, D, E>)
+	each: (id: ent) -> () -> ent?,
+	query: (() -> query<>)
+		& (<A>(A: ent<A>) -> query<A>)
+		& (<A, B>(A: ent<A>, B: ent<B>) -> query<A, B>)
+		& (<A, B, C>(A: ent<A>, B: ent<B>, C: ent<C>) -> query<A, B, C>)
+		& (<A, B, C, D>(A: ent<A>, B: ent<B>, C: ent<C>, D: ent<D>) -> query<A, B, C, D>)
+		& (<A, B, C, D, E>(A: ent<A>, B: ent<B>, C: ent<C>, D: ent<D>, E: ent<E>) -> query<A, B, C, D, E>)
 		& (<A, B, C, D, E, F>(
-			A: Ent<A>,
-			B: Ent<B>,
-			C: Ent<C>,
-			D: Ent<D>,
-			E: Ent<E>,
-			F: Ent<F>
-		) -> Query<A, B, C, D, E, F>)
+			A: ent<A>,
+			B: ent<B>,
+			C: ent<C>,
+			D: ent<D>,
+			E: ent<E>,
+			F: ent<F>
+		) -> query<A, B, C, D, E, F>)
 		& (<A, B, C, D, E, F, G>(
-			A: Ent<A>,
-			B: Ent<B>,
-			C: Ent<C>,
-			D: Ent<D>,
-			E: Ent<E>,
-			F: Ent<F>,
-			...Ent<G>
-		) -> Query<A, B, C, D, E, F, ...G>),
+			A: ent<A>,
+			B: ent<B>,
+			C: ent<C>,
+			D: ent<D>,
+			E: ent<E>,
+			F: ent<F>,
+			...ent<G>
+		) -> query<A, B, C, D, E, F, ...G>),
 
 	internal: typeof(ecs_new().internal),
 }
@@ -4140,29 +4140,29 @@ type function _query(pack: type): type
 	return Query()
 end
 
-export type query<Ids...> = _query<(Ids...) -> ()>
+export type query_fun<Ids...> = _query<(Ids...) -> ()>
 
-export type NewSolverECS = OldSolverECS
+export type new_solver_ecs = old_solver_ecs
 
-export type OnAddHook = <Data>(entity: Ent, id: Ent<Data>, data: Data) -> ()
-export type OnChangeHook = <Data>(entity: Ent, id: Ent<Data>, data: Data) -> ()
-export type OnRemoveHook = <Data>(entity: U53, id: Ent<Data>) -> ()
+export type onadd_hook = <Data>(entity: ent, id: ent<Data>, data: Data) -> ()
+export type onchange_hook = <Data>(entity: ent, id: ent<Data>, data: Data) -> ()
+export type onremove_hook = <Data>(entity: u53, id: ent<Data>) -> ()
 
-local function CAST_ENT(value: any): Ent
+local function CAST_ENT(value: any): ent
 	return value
 end
-local function CAST_ID(value: any): Id
+local function CAST_ID(value: any): id
 	return value
 end
 
 local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
-	ecs = ecs_new :: ((new_solver: true, disable_auto_ensure_dense: boolean?) -> NewSolverECS) & ((new_solver: false, disable_auto_ensure_dense: boolean?) -> OldSolverECS),
-	pair = ENT_PAIR :: (hi: Ent, lo: Ent) -> Ent,
-	pair_eh = ENT_PAIR_EH :: (id: Ent | U53) -> boolean,
-	pair_hi = ENT_PAIR_HI :: (id: Ent | U53) -> Ent,
-	pair_lo = ENT_PAIR_LO :: (id: Ent | U53) -> Ent,
+	ecs = ecs_new :: ((new_solver: true, disable_auto_ensure_dense: boolean?) -> new_solver_ecs) & ((new_solver: false, disable_auto_ensure_dense: boolean?) -> old_solver_ecs),
+	pair = ENT_PAIR :: (hi: ent, lo: ent) -> ent,
+	pair_eh = ENT_PAIR_EH :: (id: ent | u53) -> boolean,
+	pair_hi = ENT_PAIR_HI :: (id: ent | u53) -> ent,
+	pair_lo = ENT_PAIR_LO :: (id: ent | u53) -> ent,
 	Component = CAST_ID(B2Component),
-	Name = CAST_ENT(B2Name) :: Id<string>,
+	Name = CAST_ENT(B2Name) :: id<string>,
 	Wildcard = CAST_ID(B2Wildcard),
 	ChildOf = CAST_ID(B2ChildOf),
 	DeleteOnClear = CAST_ID(ENT_PAIR(B2OnClear, B2CleanupDelete)),
@@ -4176,9 +4176,9 @@ local b2264644_3d77_4ab9_8a00_5e9ffb0ff964 = {
 	OnClearTarget = CAST_ID(B2OnClearTarget),
 	OnDeleteTarget = CAST_ID(B2OnDeleteTarget),
 	CleanupDelete = CAST_ID(B2CleanupDelete),
-	OnAdd = CAST_ENT(B2OnAdd) :: Id<OnAddHook>,
-	OnChange = CAST_ENT(B2OnChange) :: Id<OnChangeHook>,
-	OnRemove = CAST_ENT(B2OnRemove) :: Id<OnRemoveHook>,
+	OnAdd = CAST_ENT(B2OnAdd) :: id<onadd_hook>,
+	OnChange = CAST_ENT(B2OnChange) :: id<onchange_hook>,
+	OnRemove = CAST_ENT(B2OnRemove) :: id<onremove_hook>,
 	Exclusive = CAST_ID(B2Exclusive),
 
 	internal = {
@@ -4253,34 +4253,34 @@ export type B2 = typeof(b2264644_3d77_4ab9_8a00_5e9ffb0ff964)
 --[[
 internal type exports
 ]]
-export type _U53 = U53
-export type _U32 = U32
-export type _U26 = U26
-export type _U24 = U24
-export type _Ptr = Ptr
-export type _Set<Key, Value = true> = Set<Key, Value>
-export type _Sorted<Tbl> = Tbl
-export type _Bitset = Bitset
-export type _IdList = IdList
-export type _ArchLocation = ArchLocation
-export type _ArchHash = ArchHash
-export type _Row = Row
-export type _PageRecord = PageRecord
-export type _Column = Column
-export type _Arch = Arch
-export type _ArchGraphNode = ArchGraphNode
-export type _Hooks = Hooks
-export type _EntRecord = EntRecord
-export type _IdRecord = IdRecord
-export type _InternalOnAddHook = InternalOnAddHook
-export type _InternalOnChangeHook = InternalOnChangeHook
-export type _InternalOnRemoveHook = InternalOnRemoveHook
-export type _QueryMatcher = QueryMatcher
-export type _QueryInner = QueryInner
-export type _QueryOuter = QueryOuter
-export type _Reporter<Parameters... = ...any> = Reporter<Parameters...>
-export type _WatcherEvent = WatcherEvent
-export type _WatcherCallback = WatcherCallback
-export type _Destructor = Destructor
+export type _u53 = u53
+export type _u32 = u32
+export type _u26 = u26
+export type _u24 = u24
+export type _ptr = ptr
+export type _set<Key, Value = true> = set<Key, Value>
+export type _sorted<Tbl> = Tbl
+export type _bitset32 = bitset32
+export type _id_list = id_list
+export type _arch_location = arch_location
+export type _arch_hash = arch_hash
+export type _row = row
+export type _page_record = page_record
+export type _column = column
+export type _arch = arch
+export type _arch_graph_node = arch_graph_node
+export type _hooks = hooks
+export type _ent_record = ent_record
+export type _id_record = id_record
+export type _internal_onadd_hook = internal_onadd_hook
+export type _internal_onchange_hook = internal_onchange_hook
+export type _internal_onremove_hook = internal_onremove_hook
+export type _query_matcher = query_matcher
+export type _query_inner = query_inner
+export type _query_outer = query_outer
+export type _reporter<Parameters... = ...any> = reporter<Parameters...>
+export type _watcher_event = watcher_event
+export type _watcher_callback = watcher_callback
+export type _destructor = destructor
 
 return b2264644_3d77_4ab9_8a00_5e9ffb0ff964
