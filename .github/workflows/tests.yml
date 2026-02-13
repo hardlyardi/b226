@@ -23,15 +23,24 @@ on:
   merge_group:
 
 jobs:
-  Test:
+  test:
     strategy:
-        matrix:
-            os: [{name: windows, version: windows-latest}, {name: ubuntu, version: ubuntu-latest}, {name: macos, version: macos-latest}, {name: macos-arm, version: macos-14}]
+      matrix:
+        os:
+          [
+            { name: windows, version: windows-latest },
+            { name: ubuntu, version: ubuntu-latest },
+            { name: macos, version: macos-latest },
+            { name: macos-arm, version: macos-14 },
+          ]
     name: ${{matrix.os.name}}
     runs-on: ${{matrix.os.version}}
 
+    # if the head commit message contains 'skip ci', skip ci.
+    if: ${{ always() && !contains(github.event.head_commit.message, 'skip ci') }}
+
     steps:
-      - name: Checkout
+      - name: checkout
         uses: actions/checkout@v4
         with:
           # only checkout files which are needed for running tests
@@ -54,4 +63,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tests-${{ matrix.os.name }}-${{ matrix.os.version }}
-          path: _SUITE/
+          path: _TESTSUITE/
