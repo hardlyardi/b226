@@ -40,8 +40,8 @@ type Column = { [Row]: any }
 type Arch = {
 	location: ArchLocation,
 	graph: ArchGraphNode,
-	-- sorted set of monitor Ids which match this archetype
-	monitored: Sorted<{ U53 }> | false,
+	-- sorted set of watcher Ids which match this archetype
+	watchers: Sorted<{ U53 }> | false,
 	ids: IdList,
 
 	--[[B2 Archetypes use of Bitsets
@@ -123,7 +123,7 @@ type IdRecord = {
 	_dense_cached: { [U26]: Arch },
 	-- location of the forthmost column for this id
 	_dense_column: { [U26]: U26 },
-	-- (column - offset) = first target column of a relation
+	-- (column - offset) = first target column of a relation, only applies to pair ids with a wildcard object.
 	_dense_offset: { [U26]: number },
 }
 local idr_flags: "_flags" = 1 :: any
@@ -157,13 +157,13 @@ type QueryMatcher = (Arch) -> boolean
 type QueryInner = () -> (U53, ...any)
 type QueryOuter = (QueryMatcher) -> ({ Arch }, { number })
 
-type Observer<Parameters... = ...any> = {
+type Reporter<Parameters... = ...any> = {
 	callback: (Parameters...) -> (),
 	match: QueryMatcher | false,
 }
 
-type MonitorEvent = "added" | "removed"
-type MonitorCallback = (MonitorEvent, U53, src: Arch, dst: Arch, Row) -> ()
+type WatcherEvent = "added" | "removed"
+type WatcherCallback = (WatcherEvent, U53, src: Arch, dst: Arch, Row) -> ()
 
 local function INDEX<Indexable, Index>(indexable: Indexable, index: Index): index<Indexable, Index>
 	return (indexable :: any)[index]
@@ -298,10 +298,10 @@ local function ecs_new(_: any)
 	local eindex_alive_count: number = 0
 	local eindex_id_top: number = 0
 
-	local observe_arch_added: Set<U53, { Observer }> = {}
-	local observe_arch_removed: Set<U53, { Observer }> = {}
+	local report_arch_added: Set<U53, { Reporter }> = {}
+	local report_arch_removed: Set<U53, { Reporter }> = {}
 
-	local monitor_callbacks: Set<U53, MonitorCallback> = {}
+	local watcher_callbacks: Set<U53, WatcherCallback> = {}
 
 	local user_components_count: number = 0
 
@@ -347,9 +347,9 @@ local function ecs_new(_: any)
 		return false
 	end
 
-	local function invoke_monitors_slow(entity: U53, src: Arch, dst: Arch, row: Row): ()
-		local src_list = src.monitored
-		local dst_list = dst.monitored
+	local function invoke_watchers_slow(entity: U53, src: Arch, dst: Arch, row: Row): ()
+		local src_list = src.watchers
+		local dst_list = dst.watchers
 		if src_list then
 			local src_count = #src_list
 			if dst_list then
@@ -364,10 +364,10 @@ local function ecs_new(_: any)
 							src_id = src_list[src_index]
 						end
 						if dst_id ~= src_id then
-							monitor_callbacks[dst_id]("added", entity, src, dst, row)
+							watcher_callbacks[dst_id]("added", entity, src, dst, row)
 							if src_id then continue end
 							for dst_index = dst_index + 1, dst_count do
-								monitor_callbacks[dst_list[dst_index]]("added", entity, src, dst, row)
+								watcher_callbacks[dst_list[dst_index]]("added", entity, src, dst, row)
 							end
 						end
 					end
@@ -382,22 +382,22 @@ local function ecs_new(_: any)
 							dst_id = dst_list[dst_index]
 						end
 						if src_id ~= dst_id then
-							monitor_callbacks[src_id]("removed", entity, src, dst, row)
+							watcher_callbacks[src_id]("removed", entity, src, dst, row)
 							if dst_id then continue end
 							for src_index = src_index + 1, src_count do
-								monitor_callbacks[src_list[src_index]]("removed", entity, src, dst, row)
+								watcher_callbacks[src_list[src_index]]("removed", entity, src, dst, row)
 							end
 						end
 					end
 				end
 			else
 				for src_index = 1, src_count do
-					monitor_callbacks[src_list[src_index]]("removed", entity, src, dst, row)
+					watcher_callbacks[src_list[src_index]]("removed", entity, src, dst, row)
 				end
 			end
 		elseif dst_list then
 			for dst_index = 1, #dst_list do
-				monitor_callbacks[dst_list[dst_index]]("added", entity, src, dst, row)
+				watcher_callbacks[dst_list[dst_index]]("added", entity, src, dst, row)
 			end
 		end
 	end
@@ -1021,7 +1021,7 @@ local function ecs_new(_: any)
 		local arch: Arch = {
 			pages_record = 0,
 			bitset_pages = NULLPTR,
-			monitored = false,
+			watchers = false,
 
 			ents = {},
 			columns = arch_columns,
@@ -1066,13 +1066,13 @@ local function ecs_new(_: any)
 		arch.bitset_pages = pages_buff
 
 		for id in arch_columns_map do
-			local cache = observe_arch_added[id]
+			local cache = report_arch_added[id]
 			if not cache then continue end
 
 			for cache_index = 1, #cache do
-				local observer = cache[cache_index]
-				local match = observer.match
-				if (not match) or match(arch) then observer.callback(arch) end
+				local reporter = cache[cache_index]
+				local match = reporter.match
+				if (not match) or match(arch) then reporter.callback(arch) end
 			end
 		end
 
@@ -1299,7 +1299,7 @@ local function ecs_new(_: any)
 		local dst_arch = agraph_ensure_arch(dst_node)
 		local dst_row = ent_move(entity, record, record_arch, dst_arch)
 
-		invoke_monitors_slow(entity, record_arch, dst_arch, dst_row)
+		invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 	end
 
 	local function ecs_bulk_add(entity: U53, add_ids: { U53 }): ()
@@ -1356,7 +1356,7 @@ local function ecs_new(_: any)
 		local dst_arch = agraph_ensure_arch(dst_node)
 		if record_arch ~= dst_arch then
 			local dst_row = ent_move(entity, record, record_arch, dst_arch)
-			invoke_monitors_slow(entity, record_arch, dst_arch, dst_row)
+			invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 		end
 	end
 
@@ -1434,7 +1434,7 @@ local function ecs_new(_: any)
 			column = dst_arch.columns_map[id]
 			column[dst_row] = data
 
-			invoke_monitors_slow(entity, record_arch, dst_arch, dst_row)
+			invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 		end
 	end
 
@@ -1521,7 +1521,7 @@ local function ecs_new(_: any)
 				column[dst_row] = id_data
 			end
 
-			invoke_monitors_slow(entity, record_arch, dst_arch, dst_row)
+			invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 		else
 			local dst_row = RECORD_ENSURE_ROW(record, record_arch, entity)
 
@@ -1575,7 +1575,7 @@ local function ecs_new(_: any)
 		local dst_arch = agraph_ensure_arch(dst_node)
 		local dst_row = ent_move(entity, record, record_arch, dst_arch)
 
-		invoke_monitors_slow(entity, record_arch, dst_arch, dst_row)
+		invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 	end
 
 	local function ecs_bulk_remove(entity: U53, remove_ids: { U53 }): ()
@@ -1623,7 +1623,7 @@ local function ecs_new(_: any)
 		local dst_arch = agraph_ensure_arch(dst_node)
 		if record_arch ~= dst_arch then
 			local dst_row = ent_move(entity, record, record_arch, dst_arch)
-			invoke_monitors_slow(entity, record_arch, dst_arch, dst_row)
+			invoke_watchers_slow(entity, record_arch, dst_arch, dst_row)
 		end
 	end
 
@@ -1636,7 +1636,7 @@ local function ecs_new(_: any)
 	archetype known to us.
 	- We can compute the destination archetype only once for each archetype, avoiding a graph traversal on every
 	entity.
-	- We can put checks for on_remove hooks and/or monitor lists outside of inner loops
+	- We can put checks for on_remove hooks and/or watcher lists outside of inner loops
 	]]
 	local function ecs_clear(input_entity: U53, delete: boolean?): ()
 		local record = eindex_try_matching_record(input_entity)
@@ -1881,13 +1881,13 @@ local function ecs_new(_: any)
 		if arch == ROOT_ARCHETYPE then return end
 
 		for id in arch.columns_map do
-			local observer_cache = observe_arch_removed[id]
-			if observer_cache then
-				local observer_cache_count = #observer_cache
-				for observer_cache_index = 1, observer_cache_count do
-					local observer = observer_cache[observer_cache_index]
-					local match = observer.match
-					if (not match) or match(arch) then observer.callback(arch) end
+			local reporter_cache = report_arch_removed[id]
+			if reporter_cache then
+				local reporter_cache_count = #reporter_cache
+				for reporter_cache_index = 1, reporter_cache_count do
+					local reporter = reporter_cache[reporter_cache_index]
+					local match = reporter.match
+					if (not match) or match(arch) then reporter.callback(arch) end
 				end
 			end
 			local id_record = cindex[id]
@@ -1967,7 +1967,7 @@ local function ecs_new(_: any)
 		end
 	end
 
-	local query_matcher_cache: { [string]: QueryMatcher } = setmetatable({}, { __mode = "v" })
+	local query_matcher_cache: { [string]: QueryMatcher } = setmetatable({}, { __mode = "v" }) :: typeof({})
 	local function query_matcher_hash(query_with: IdList, query_without: IdList): string
 		local with_hash = ORDERED_HASH(query_with)
 		local without_hash = ORDERED_HASH(query_without)
@@ -2544,10 +2544,10 @@ local function ecs_new(_: any)
 		_sparse: { [U53]: number },
 		_with_dense: { U53 },
 		_without_dense: { U53 },
-		_observed_archs: { Arch }?,
+		_reported_archs: { Arch }?,
 		_matcher: QueryMatcher?,
 	}, typeof(queryobj_metatable)>
-	type QueryMonitorInternal = {
+	type QueryWatcherInternal = {
 		destroy: () -> (),
 	}
 	local function ecs_query(...: U53): QueryIdentityInternal
@@ -2562,7 +2562,7 @@ local function ecs_new(_: any)
 			_with_dense = with_dense,
 			_without_dense = {},
 			_matcher = nil :: QueryMatcher?,
-			_observed_archs = nil :: { Arch }?,
+			_reported_archs = nil :: { Arch }?,
 		}, queryobj_metatable)
 		return self
 	end
@@ -3500,31 +3500,31 @@ local function ecs_new(_: any)
 		return query_iter
 	end
 
-	function queryobj.observe_added(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
+	function queryobj.report_added(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
 		local with_dense = self._with_dense
 		local First = ASSERT(with_dense[1], "Internal Error")
 
-		local added_cached: index<typeof(observe_arch_added), U53>
+		local added_cached: index<typeof(report_arch_added), U53>
 		for with_index = 1, #with_dense do
-			local cache = observe_arch_added[with_dense[with_index]]
+			local cache = report_arch_added[with_dense[with_index]]
 			if cache then
 				added_cached = cache
 				break
 			end
 		end
-		local observer: Observer<(Arch)> = {
+		local reporter: Reporter<(Arch)> = {
 			match = self:match(),
 			callback = callback,
 		}
 		if not added_cached then
-			added_cached = { observer } :: index<typeof(observe_arch_added), U53>
-			observe_arch_added[First] = added_cached
+			added_cached = { reporter } :: index<typeof(report_arch_added), U53>
+			report_arch_added[First] = added_cached
 		else
-			table.insert(added_cached, observer)
+			table.insert(added_cached, reporter)
 		end
 
-		local function observer_destroy(): ()
-			local found_index = table.find(added_cached, observer)
+		local function reporter_destroy(): ()
+			local found_index = table.find(added_cached, reporter)
 			if not found_index then return end
 			local added_cached_count = #added_cached
 			if found_index ~= added_cached_count then
@@ -3533,34 +3533,34 @@ local function ecs_new(_: any)
 			added_cached[added_cached_count] = nil
 		end
 
-		return observer_destroy
+		return reporter_destroy
 	end
 
-	function queryobj.observe_removed(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
+	function queryobj.report_removed(self: QueryIdentityInternal, callback: (Arch) -> ()): () -> ()
 		local with_dense = self._with_dense
 		local First = ASSERT(with_dense[1], "Internal Error")
 
-		local removed_cached: index<typeof(observe_arch_removed), U53>
+		local removed_cached: index<typeof(report_arch_removed), U53>
 		for with_index = 1, #with_dense do
-			local cache = observe_arch_removed[with_dense[with_index]]
+			local cache = report_arch_removed[with_dense[with_index]]
 			if cache then
 				removed_cached = cache
 				break
 			end
 		end
-		local observer: Observer<(Arch)> = {
+		local reporter: Reporter<(Arch)> = {
 			match = self:match(),
 			callback = callback,
 		}
 		if not removed_cached then
-			removed_cached = { observer } :: index<typeof(observe_arch_removed), U53>
-			observe_arch_removed[First] = removed_cached
+			removed_cached = { reporter } :: index<typeof(report_arch_removed), U53>
+			report_arch_removed[First] = removed_cached
 		else
-			table.insert(removed_cached, observer)
+			table.insert(removed_cached, reporter)
 		end
 
-		local function observer_destroy(): ()
-			local found_index = table.find(removed_cached, observer)
+		local function reporter_destroy(): ()
+			local found_index = table.find(removed_cached, reporter)
 			if not found_index then return end
 			local removed_cached_count = #removed_cached
 			if found_index ~= removed_cached_count then
@@ -3569,56 +3569,56 @@ local function ecs_new(_: any)
 			removed_cached[removed_cached_count] = nil
 		end
 
-		return observer_destroy
+		return reporter_destroy
 	end
 
-	function queryobj.monitor_rows(self: QueryIdentityInternal, callback: MonitorCallback): QueryMonitorInternal
+	function queryobj.watch_rows(self: QueryIdentityInternal, callback: WatcherCallback): QueryWatcherInternal
 		local entity = ecs_entity()
-		monitor_callbacks[entity] = callback
+		watcher_callbacks[entity] = callback
 
 		local function arch_added(arch: Arch): ()
-			local monitored = arch.monitored
-			if monitored then
-				binary_table_insert(monitored, entity)
+			local watchers = arch.watchers
+			if watchers then
+				binary_table_insert(watchers, entity)
 			else
-				arch.monitored = { entity }
+				arch.watchers = { entity }
 			end
 		end
 
-		local destroy_observer = self:observe_added(arch_added)
+		local destroy_reporter = self:report_added(arch_added)
 		for _, arch in self:archetypes() do
 			arch_added(arch)
 		end
 
-		local function monitor_destroy(): ()
-			destroy_observer()
-			local archetypes = self:archetypes()
+		local function watcher_destroy(): ()
+			destroy_reporter()
+			local archetypes = self:archetypes() :: {Arch}
 			local archetypes_count = #archetypes
 			for archetypes_index = 1, archetypes_count do
 				local arch = archetypes[archetypes_index]
-				local monitors = arch.monitored
-				if not monitors then
+				local watchers = arch.watchers
+				if not watchers then
 					-- TODO: should this error?
 					continue
 				end
-				local found = binary_find(monitors, entity)
-				table.remove(monitors, found)
+				local found = binary_find(watchers, entity)
+				table.remove(watchers, found)
 			end
 		end
 
 		return {
-			destroy = monitor_destroy,
+			destroy = watcher_destroy,
 		}
 	end
 
-	function queryobj.monitor_added(self: QueryIdentityInternal, callback: (U53, ...any) -> ()): QueryMonitorInternal
+	function queryobj.watch_added(self: QueryIdentityInternal, callback: (U53, ...any) -> ()): QueryWatcherInternal
 		local reads = self._reads
 		local reads_count = #reads
 
-		local wrapper_callback: MonitorCallback
+		local wrapper_callback: WatcherCallback
 		if reads_count == 1 then
 			local A = reads[1]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A], row)
@@ -3626,7 +3626,7 @@ local function ecs_new(_: any)
 		elseif reads_count == 2 then
 			local A = reads[1]
 			local B = reads[2]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row])
@@ -3635,7 +3635,7 @@ local function ecs_new(_: any)
 			local A = reads[1]
 			local B = reads[2]
 			local C = reads[3]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row], columns_map[C][row])
@@ -3645,7 +3645,7 @@ local function ecs_new(_: any)
 			local B = reads[2]
 			local C = reads[3]
 			local D = reads[4]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(entity, columns_map[A][row], columns_map[B][row], columns_map[C][row], columns_map[D][row])
@@ -3656,7 +3656,7 @@ local function ecs_new(_: any)
 			local C = reads[3]
 			local D = reads[4]
 			local E = reads[5]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3675,7 +3675,7 @@ local function ecs_new(_: any)
 			local D = reads[4]
 			local E = reads[5]
 			local F = reads[6]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3696,7 +3696,7 @@ local function ecs_new(_: any)
 			local E = reads[5]
 			local F = reads[6]
 			local G = reads[7]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3719,7 +3719,7 @@ local function ecs_new(_: any)
 			local F = reads[6]
 			local G = reads[7]
 			local H = reads[8]
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				callback(
@@ -3746,7 +3746,7 @@ local function ecs_new(_: any)
 			local G = reads[7]
 			local H = reads[8]
 			local rest_size = reads_count - 8
-			function wrapper_callback(event: MonitorEvent, entity: U53, _, arch: Arch, row: Row): ()
+			function wrapper_callback(event: WatcherEvent, entity: U53, _, arch: Arch, row: Row): ()
 				if event ~= "added" then return end
 				local columns_map = arch.columns_map
 				local rest = table.create(rest_size)
@@ -3770,51 +3770,51 @@ local function ecs_new(_: any)
 			end
 		end
 
-		return (self:monitor_rows(wrapper_callback))
+		return (self:watch_rows(wrapper_callback))
 	end
 
-	function queryobj.monitor_removed(self: QueryIdentityInternal, callback: (U53) -> ()): QueryMonitorInternal
-		local function wrapper_callback(event: MonitorEvent, entity: U53): ()
+	function queryobj.watch_removed(self: QueryIdentityInternal, callback: (U53) -> ()): QueryWatcherInternal
+		local function wrapper_callback(event: WatcherEvent, entity: U53): ()
 			if event ~= "removed" then return end
 			callback(entity)
 		end
 
-		return (self:monitor_rows(wrapper_callback))
+		return (self:watch_rows(wrapper_callback))
 	end
 
 	function queryobj.archetypes_cached(self: QueryIdentityInternal): { Arch }
 		do
-			local cached = self._observed_archs
+			local cached = self._reported_archs
 			if cached then return cached end
 		end
 		local with_dense = self._with_dense
 		local First = with_dense[1]
 		if not First then error("cannot get archetype cache from blank query") end
 
-		local added_cached: index<typeof(observe_arch_added), U53>
+		local added_cached: index<typeof(report_arch_added), U53>
 		for with_index = 1, #with_dense do
-			local cache = observe_arch_added[with_dense[with_index]]
+			local cache = report_arch_added[with_dense[with_index]]
 			if cache then
 				added_cached = cache
 				break
 			end
 		end
 		if not added_cached then
-			added_cached = {} :: index<typeof(observe_arch_added), U53>
-			observe_arch_added[First] = added_cached
+			added_cached = {} :: index<typeof(report_arch_added), U53>
+			report_arch_added[First] = added_cached
 		end
 
-		local removed_cached: index<typeof(observe_arch_removed), U53>
+		local removed_cached: index<typeof(report_arch_removed), U53>
 		for with_index = 1, #with_dense do
-			local cache = observe_arch_removed[with_dense[with_index]]
+			local cache = report_arch_removed[with_dense[with_index]]
 			if cache then
 				removed_cached = cache
 				break
 			end
 		end
 		if not removed_cached then
-			removed_cached = {} :: index<typeof(observe_arch_removed), U53>
-			observe_arch_removed[First] = removed_cached
+			removed_cached = {} :: index<typeof(report_arch_removed), U53>
+			report_arch_removed[First] = removed_cached
 		end
 
 		local arch_cache_dense: { [U26]: Arch } = self:archetypes()
@@ -3825,13 +3825,13 @@ local function ecs_new(_: any)
 			arch_cache_sparse[arch] = dense_index
 		end
 
-		local function observing_added(arch: Arch): ()
+		local function reporting_added(arch: Arch): ()
 			local dense_location = arch_cache_dense_count + 1
 			arch_cache_dense_count = dense_location
 			arch_cache_dense[arch_cache_dense_count] = arch
 		end
 
-		local function observing_removed(arch: Arch): ()
+		local function reporting_removed(arch: Arch): ()
 			local dense_location = arch_cache_sparse[arch]
 			local dense_swap = arch_cache_dense_count
 			arch_cache_dense_count = dense_swap - 1
@@ -3847,8 +3847,8 @@ local function ecs_new(_: any)
 			end
 		end
 
-		self:observe_added(observing_added)
-		self:observe_removed(observing_removed)
+		self:report_added(reporting_added)
+		self:report_removed(reporting_removed)
 
 		return arch_cache_dense
 	end
@@ -3916,19 +3916,19 @@ local function ecs_new(_: any)
 			arch_scheduled_for_deletion = arch_scheduled_for_deletion,
 			archetypes = archetypes,
 			archetypes_count = function() return archetypes_count end,
-			observe_arch_added = observe_arch_added,
-			observe_arch_removed = observe_arch_removed,
+			report_arch_added = report_arch_added,
+			report_arch_removed = report_arch_removed,
 			cindex = cindex,
 			eindex_dense = eindex_dense,
 			eindex_sparse = eindex_sparse,
 			eindex_alive_count = function() return eindex_alive_count end,
 			eindex_id_top = function() return eindex_id_top end,
-			monitor_callbacks = monitor_callbacks,
+			watcher_callbacks = watcher_callbacks,
 			user_components_count = function() return user_components_count end,
 			eindex_try_any_record = eindex_try_any_record,
 			eindex_try_matching_record = eindex_try_matching_record,
 			eindex_alive_eh = eindex_alive_eh,
-			invoke_monitors_slow = invoke_monitors_slow,
+			invoke_watchers_slow = invoke_watchers_slow,
 			ecs_arch_data = ecs_arch_data,
 			ecs_existed = ecs_existed,
 			ecs_contains = ecs_contains,
@@ -3993,7 +3993,7 @@ export type Ent<T = any> = { _B2: T }
 export type Id<T = nil> = Ent<T>
 
 type Destructor = () -> ()
-export type QueryMonitor = {
+export type QueryWatcher = {
 	destroy: Destructor,
 }
 
@@ -4006,11 +4006,11 @@ export type Query<Reads...> = {
 	outer: (self: Query<Reads...>, cached: true?) -> () -> (Arch, () -> (Row, Ent, Reads...)),
 	entities: (self: Query<Reads...>, cached: true?) -> () -> (Ent, Reads...),
 	archetypes_cached: (self: Query<Reads...>) -> { Arch },
-	observe_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
-	observe_removed: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
-	monitor_rows: (self: Query<Reads...>, callback: MonitorCallback) -> QueryMonitor,
-	monitor_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> QueryMonitor,
-	monitor_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> QueryMonitor,
+	report_added: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
+	report_removed: (self: Query<Reads...>, callback: (Arch) -> ()) -> Destructor,
+	watch_rows: (self: Query<Reads...>, callback: WatcherCallback) -> QueryWatcher,
+	watch_added: (self: Query<Reads...>, callback: (Ent, Reads...) -> ()) -> QueryWatcher,
+	watch_removed: (self: Query<Reads...>, callback: (Ent) -> ()) -> QueryWatcher,
 }
 
 export type OldSolverECS = {
@@ -4278,9 +4278,9 @@ export type _InternalOnRemoveHook = InternalOnRemoveHook
 export type _QueryMatcher = QueryMatcher
 export type _QueryInner = QueryInner
 export type _QueryOuter = QueryOuter
-export type _Observer<Parameters... = ...any> = Observer<Parameters...>
-export type _MonitorEvent = MonitorEvent
-export type _MonitorCallback = MonitorCallback
+export type _Reporter<Parameters... = ...any> = Reporter<Parameters...>
+export type _WatcherEvent = WatcherEvent
+export type _WatcherCallback = WatcherCallback
 export type _Destructor = Destructor
 
 return b2264644_3d77_4ab9_8a00_5e9ffb0ff964
