@@ -1,0 +1,132 @@
+{
+    "folders": [
+        {
+            "path": "./",
+        }
+    ],
+    "launch": {
+        "configurations": [],
+        "compounds": []
+    },
+
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "b2: run tests",
+                "type": "shell",
+                "command": "lune run tests",
+                "group": {
+                    "kind": "test",
+                    "isDefault": true,
+                },
+                "runOptions": {
+                    "runOn": "default"
+                },
+                "presentation": {
+                    "echo": false,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "shared",
+                    "showReuseMessage": true,
+                    "clear": true,
+                }
+            },
+            {
+                "label": "b2: run tests (verbose)",
+                "type": "shell",
+                "command": "lune run tests -v",
+                "group": {
+                    "kind": "test",
+                    "isDefault": true,
+                },
+                "runOptions": {
+                    "runOn": "default"
+                },
+                "presentation": {
+                    "echo": false,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "shared",
+                    "showReuseMessage": true,
+                    "clear": true,
+                }
+            },
+            {
+                "label": "b2: run benchmarks",
+                "type": "shell",
+                "command": "lune run bench",
+                "group": {
+                    "kind": "test",
+                    "isDefault": true,
+                },
+                "runOptions": {
+                    "runOn": "default"
+                },
+                "presentation": {
+                    "echo": false,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "shared",
+                    "showReuseMessage": true,
+                    "clear": true,
+                }
+            },
+        ],
+    },
+
+    "settings": {
+        "editor.insertSpaces": false,
+        
+        "luau-lsp.fflags.enableNewSolver": true,
+        "luau-lsp.fflags.enableByDefault": true,
+        "luau-lsp.sourcemap.enabled": false,
+        "luau-lsp.platform.type": "roblox",
+        "luau-lsp.diagnostics.workspace": false,
+
+         // MD linter config for docs
+        "markdownlint.config": {
+            // Inline HTML
+            "MD033": false,
+            // Multiple top level headers
+            "MD025": false,
+            // Duplicate Headers
+            "MD024": false,
+            // Indentation Codeblocks Thingy
+            "MD046": false,
+        },
+
+        // charmed icons
+        "charmed-icons.associations.extensions": {
+            // typedefs
+            "types.luau": "luau-def",
+            // bench file
+            "spec.luau": "test-blue",
+            // benchmarks
+            "bench.luau": "test-yellow"
+        },
+        "charmed-icons.associations.files": {
+            // typedefs
+            "types.luau": "luau-def",
+            // init.luau
+            "init.luau": "julia"
+        },
+        "charmed-icons.associations.folders": {
+            // docs / readme as storybook
+            "_README": "folder_storybook",
+            "docs": "folder_storybook",
+            // specs/benchmarks
+            ".specs": "folder_test",
+            ".benchmarks": "folder_benchmark",
+        },
+    },
+
+    "extensions": {
+        "recommendations": [
+            "johnnymorganz.luau-lsp",
+            "johnnymorganz.stylua",
+            "DavidAnson.vscode-markdownlint",
+            "tamasfe.even-better-toml"
+        ]
+    }
+}

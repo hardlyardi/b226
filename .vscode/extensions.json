@@ -1,8 +1,0 @@
-{
-    "recommendations": [
-        "johnnymorganz.luau-lsp",
-        "johnnymorganz.stylua",
-        "DavidAnson.vscode-markdownlint",
-        "tamasfe.even-better-toml"
-    ]
-}
