@@ -1,22 +1,22 @@
 --!optimize 2
 --!native
 --[[
-- U53:
+- u53:
 	Represents a positive integer with a number (a.k.a., double, or F64) value. 2^53 is the maximum unsigned integer a
 number in luau can accurately represent. Used primarily for entity Ids.
-- U32:
+- u32:
 	Represents a positive integer, and implies it can or should be used with bit32 or other 32-bit operations.
-- U26:
+- u26:
 	Represents a positive integer up to 2^26, which is the maximum size for an array in luau. Because of this, it's used
 to signify a table indexer which is a "dense array".
-- U24:
-	Represents the maximum positive integer a float (F32) can accurately represent, but it is more relevant in this
+- u24:
+	Represents the maximum positive integer a float (f32) can accurately represent, but it is more relevant in this
 library as the "low" portion of an entity ID.
-- Ptr:
+- ptr:
 	Represents a position in a buffer.
-- Set<Key, Value>:
+- set<Key, Value>:
 	Specifically represents sparse mappings of keys and values. If no value is provided, it defaults to true.
-- Sorted<Values>:
+- sorted<Values>:
 	Denotes an object will always have sorted values no matter what.
 ]]
 type u53 = number
@@ -4135,9 +4135,9 @@ type function _query(pack: type): type
 			end
 			id_types[head_index] = prop
 		end
-		return (query(table.unpack(id_types)))
+		return (query_extracted(table.unpack(id_types)))
 	end
-	return query()
+	return query_extracted()
 end
 
 export type query<Ids...> = _query<(Ids...) -> ()>
