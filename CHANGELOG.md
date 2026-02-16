@@ -28,7 +28,7 @@ formally supported for wildcards.
 extra overhead for transited relations.
 - new `ecs.on_add`, `ecs.on_remove`, and `ecs.on_change` signals.
 - `b2.IsA` for constructing component / relationship inheritance.
-- `ecs.ids_of(entity)` for retrieving every id an entity contains. Does not include implicit IDs such as Wildcards,
+- ✅ `ecs.ids_of(entity)` for retrieving every id an entity contains. Does not include implicit IDs such as Wildcards,
 Inheritance, or Transitive Relationships.
 
 ### Fixed
