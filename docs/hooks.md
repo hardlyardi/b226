@@ -34,7 +34,7 @@ ecs.remove(entity, Component)
 ecs.in_use(Component) --> true
 ```
 
-Because only one component hook kind can exist per Component, it's important that hooks be used correctly. Hooks are
+Because only one component hook of each kind can exist per Component, it's important that hooks be used correctly. Hooks are
 intended for enforcing invariants, I.e., ensuring that something is always true under certain conditions. Here's an
 example of how you could use hooks:
 
