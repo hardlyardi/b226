@@ -1,3 +1,9 @@
+<h1 align="center">⚠️ B2 is no longer maintained! ⚠️</h1>
+
+<h2 align="center">I recommend using <a href="https://github.com/luau-ecs/oxgz">OP Xenon Gandalf Zebra</a> instead once it is released! It is a superset of B226's features (minus bulk operations as of writing), has similar syntax, and should be a more robust replacement.</h2>
+
+---
+
 # B2?
 
 b2264644-3d77-4ab9-8a00-5e9ffb0ff964 is a robust, fast, and lightweight entity component system for Luau. It is fully
